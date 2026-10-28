@@ -3,6 +3,21 @@ const { test } = require("node:test");
 const Module = require("node:module");
 const path = require("node:path");
 
+const javaInvocations = [];
+const childProcess = {
+  execFile(executable, args, options, callback) {
+    javaInvocations.push({ executable, args, options });
+    if (args.includes("-XX:+PrintFlagsFinal")) {
+      callback(null, [
+        "     bool UnlockDiagnosticVMOptions                 = true                                      {diagnostic} {command line}",
+        "     bool UseG1GC                                    = true                                      {product} {default}"
+      ].join("\n"), "");
+      return;
+    }
+    callback(null, "", 'java version "25.0.3"');
+  }
+};
+
 const vscode = {
   Range: class Range {
     constructor(startLine, start, endLine, end) {
@@ -23,10 +38,17 @@ const vscode = {
 
 const originalLoad = Module._load;
 Module._load = function(request, parent, isMain) {
-  return request === "vscode" ? vscode : originalLoad.call(this, request, parent, isMain);
+  if (request === "vscode") {
+    return vscode;
+  }
+  if (request === "node:child_process") {
+    return childProcess;
+  }
+  return originalLoad.call(this, request, parent, isMain);
 };
 const {
   getJvmArguments,
+  loadJdk,
   parseJdkFlags,
   resolveJavaExecutable,
   validateDocument
@@ -56,6 +78,20 @@ test("parses JVM flags and ignores non-flag output", () => {
     origin: "product"
   });
   assert.equal(flags.get("MaxHeapSize").type, "uintx");
+});
+
+test("loads diagnostic flags by unlocking diagnostic options first", async () => {
+  javaInvocations.length = 0;
+  const jdk = await loadJdk(path.resolve(path.join(path.sep, "fake-jdk")));
+  const flagInvocation = javaInvocations.find(invocation => invocation.args.includes("-XX:+PrintFlagsFinal"));
+
+  assert.deepEqual(flagInvocation.args, [
+    "-XX:+UnlockDiagnosticVMOptions",
+    "-XX:+PrintFlagsFinal",
+    "-version"
+  ]);
+  assert.equal(jdk.flags.has("UnlockDiagnosticVMOptions"), true);
+  assert.equal(jdk.version, 'java version "25.0.3"');
 });
 
 test("reports invalid values and unterminated quotes as errors", () => {

@@ -64,7 +64,11 @@ async function loadJdk(candidate) {
     throw new Error("Enter a Java executable path or a JDK home directory.");
   }
   const version = await execJava(executable, ["-version"]);
-  const flagOutput = await execJava(executable, ["-XX:+PrintFlagsFinal", "-version"]);
+  const flagOutput = await execJava(executable, [
+    "-XX:+UnlockDiagnosticVMOptions",
+    "-XX:+PrintFlagsFinal",
+    "-version"
+  ]);
   const flags = parseJdkFlags(flagOutput);
   if (flags.size === 0) {
     throw new Error(`Could not read JVM flags from ${executable}.`);
@@ -181,6 +185,12 @@ function getJdkCompletionOptions() {
 }
 
 const options = [
+  {
+    label: "-XX:+UnlockDiagnosticVMOptions",
+    insertText: "-XX:+UnlockDiagnosticVMOptions",
+    description: "Enable diagnostic JVM options. This must precede diagnostic flags that require unlocking.",
+    type: "Boolean"
+  },
   {
     label: "-XX:+UseG1GC",
     insertText: "-XX:+UseG1GC",
@@ -940,6 +950,7 @@ module.exports = {
   deactivate,
   validateDocument,
   getJvmArguments,
+  loadJdk,
   parseJdkFlags,
   resolveJavaExecutable
 };
