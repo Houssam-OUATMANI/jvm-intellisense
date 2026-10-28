@@ -4,9 +4,13 @@
   "description": "Language support for JVM launch options and Java argument files.",
   "version": "0.1.0",
   "publisher": "jvm-intellisense",
+  "main": "./extension.js",
   "engines": {
     "vscode": "^1.80.0"
   },
+  "activationEvents": [
+    "onLanguage:jvm-args"
+  ],
   "categories": [
     "Programming Languages"
   ],
@@ -20,6 +24,10 @@
         ],
         "filenames": [
           "jvm.args"
+        ],
+        "extensions": [
+          ".jvmargs",
+          ".vmoptions"
         ],
         "configuration": "./language-configuration.json"
       }
