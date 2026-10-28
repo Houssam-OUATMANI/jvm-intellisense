@@ -633,24 +633,29 @@ function isFileNotFound(error) {
   return error && (error.code === "FileNotFound" || error.code === "ENOENT");
 }
 
-async function provideArgumentFileDefinition(document, position) {
-  const reference = getArgumentFileReferenceAtPosition(document, position);
-  if (!reference) {
-    return undefined;
-  }
-  const uri = resolveArgumentFileUri(document, reference);
-  if (!uri) {
-    return undefined;
-  }
-  try {
-    await vscode.workspace.fs.stat(uri);
-  } catch (error) {
-    if (isFileNotFound(error)) {
-      return undefined;
+async function provideArgumentFileLinks(document, token) {
+  const links = [];
+  for (const reference of getArgumentFileReferences(document)) {
+    const uri = resolveArgumentFileUri(document, reference);
+    if (!uri) {
+      continue;
     }
-    throw error;
+    try {
+      await vscode.workspace.fs.stat(uri);
+    } catch (error) {
+      if (isFileNotFound(error)) {
+        continue;
+      }
+      throw error;
+    }
+    const link = new vscode.DocumentLink(reference.range, uri);
+    link.tooltip = `Open argument file ${reference.path}`;
+    links.push(link);
   }
-  return new vscode.Location(uri, new vscode.Position(0, 0));
+  if (token && token.isCancellationRequested) {
+    return [];
+  }
+  return links;
 }
 
 function addDiagnostic(diagnostics, token, message, severity) {
@@ -1023,9 +1028,9 @@ function activate(context) {
       }
       await validateWithJava(editor.document);
     }),
-    vscode.languages.registerDefinitionProvider(
+    vscode.languages.registerDocumentLinkProvider(
       { language: "jvm-args" },
-      { provideDefinition: provideArgumentFileDefinition }
+      { provideDocumentLinks: provideArgumentFileLinks }
     ),
     vscode.languages.registerCompletionItemProvider(
       { language: "jvm-args" },
@@ -1057,7 +1062,7 @@ module.exports = {
   getArgumentFileReferenceAtPosition,
   resolveArgumentFileUri,
   enableArgumentFileLanguage,
-  provideArgumentFileDefinition,
+  provideArgumentFileLinks,
   loadJdk,
   parseJdkFlags,
   resolveJavaExecutable

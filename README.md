@@ -13,7 +13,7 @@ Language support for JVM launch options and Java argument files in Visual Studio
 - Associates `jvm.args`, `.args`, `.jvmargs`, and `.vmoptions` files with the `jvm-args` language.
 - Highlights JVM options, system properties, values, comments, quoted arguments, and `@file` references.
 - Uses standard TextMate scopes so colors come from the active VS Code theme.
-- Opens `@file` references with Go to Definition (F12 or Ctrl+Click), resolves paths relative to the containing argument file, and enables IntelliSense for referenced files.
+- Opens `@file` references with one native document link spanning the entire reference (Ctrl+Click), resolves paths relative to the containing argument file, and enables IntelliSense for referenced files.
 - Configures `#` line comments and quote pairing.
 - Provides initial completion and hover documentation for common JVM and Java launcher options.
 - Suggests example values for common heap, stack, and selected `-XX` options.

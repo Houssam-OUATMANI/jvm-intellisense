@@ -45,14 +45,9 @@ const vscode = {
       };
     }
   },
-  Position: class Position {
-    constructor(line, character) {
-      Object.assign(this, { line, character });
-    }
-  },
-  Location: class Location {
-    constructor(uri, range) {
-      Object.assign(this, { uri, range });
+  DocumentLink: class DocumentLink {
+    constructor(range, target) {
+      Object.assign(this, { range, target });
     }
   }
 };
@@ -74,7 +69,7 @@ const {
   enableArgumentFileLanguage,
   loadJdk,
   parseJdkFlags,
-  provideArgumentFileDefinition,
+  provideArgumentFileLinks,
   resolveJavaExecutable,
   resolveArgumentFileUri,
   validateDocument
@@ -235,25 +230,33 @@ test("enables IntelliSense for referenced files without overriding another langu
   assert.equal(await enableArgumentFileLanguage(javaDocument), javaDocument);
 });
 
-test("resolves argument references relative to their file and provides navigation", async () => {
+test("provides one navigation link spanning the full argument-file reference", async () => {
   const sourcePath = path.resolve(path.join(path.sep, "workspace", "jvm.args"));
   const targetPath = path.resolve(path.join(path.sep, "workspace", "config", "jvm-blaa"));
-  const document = Object.assign(documentFrom("@config/jvm-blaa"), {
+  const document = Object.assign(documentFrom("@config/jvm-blaa @other.args"), {
     uri: { scheme: "file", fsPath: sourcePath }
   });
   const uri = resolveArgumentFileUri(document, { path: "config/jvm-blaa" });
   assert.equal(uri.fsPath, targetPath);
 
+  const statPaths = [];
   vscode.workspace = {
     fs: {
       stat: async target => {
-        assert.equal(target.fsPath, targetPath);
+        statPaths.push(target.fsPath);
       }
     }
   };
-  const definition = await provideArgumentFileDefinition(document, { line: 0, character: 5 });
-  assert.equal(definition.uri.fsPath, targetPath);
-  assert.deepEqual(definition.range, new vscode.Position(0, 0));
+  const links = await provideArgumentFileLinks(document);
+  assert.equal(links.length, 2);
+  assert.equal(links[0].target.fsPath, targetPath);
+  assert.equal(links[0].range.start.character, 0);
+  assert.equal(links[0].range.end.character, "@config/jvm-blaa".length);
+  assert.equal(links[0].tooltip, "Open argument file config/jvm-blaa");
+  assert.deepEqual(statPaths, [
+    targetPath,
+    path.resolve(path.join(path.dirname(sourcePath), "other.args"))
+  ]);
 });
 
 test("resolves JDK homes and preserves explicit Java executable paths", () => {
