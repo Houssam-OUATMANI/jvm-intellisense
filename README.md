@@ -12,6 +12,9 @@ Language support for JVM launch options and Java argument files in Visual Studio
 - Suggests example values for common heap, stack, and selected `-XX` options.
 - Reports malformed arguments and invalid values, plus repeated options and conflicting garbage collectors.
 - Marks options absent from the bundled catalog as informational because their availability depends on the JDK.
+- Detects Java from `JAVA_HOME` or `PATH`, or lets you select a Java executable/JDK home.
+- Loads `-XX` flags from the selected JVM with `-XX:+PrintFlagsFinal` and adapts flag completions and diagnostics.
+- Provides a command to validate JVM options with the selected Java executable.
 
 ## Custom file associations
 
@@ -26,4 +29,10 @@ Associate other file names or extensions with the language using VS Code setting
 }
 ```
 
-The option catalog is an initial, curated baseline rather than a complete list. Option availability and defaults vary by JDK version and vendor; the extension therefore reports uncatalogued options as informational rather than treating them as invalid.
+The option catalog is an initial, curated baseline rather than a complete list. Option availability and defaults vary by JDK version and vendor; when a JDK is selected, `-XX` flags are read from that JVM and options it does not report remain informational.
+
+## JDK integration
+
+The extension detects Java from `JAVA_HOME` and then `PATH`. To choose another installation, run **JVM IntelliSense: Select JDK** or set `jvmIntelliSense.javaPath` to a Java executable or JDK home directory.
+
+Run **JVM IntelliSense: Validate Options with Java** from a JVM argument file to check its JVM options with the selected executable. The command asks for confirmation because Java agent options may execute code. It does not expand `@file` references or launch an application.

@@ -1,4 +1,184 @@
 const vscode = require("vscode");
+const { execFile } = require("node:child_process");
+const fs = require("node:fs");
+const path = require("node:path");
+
+let selectedJdk;
+
+const execJava = (executable, args) => new Promise((resolve, reject) => {
+  execFile(
+    executable,
+    args,
+    { timeout: 15000, maxBuffer: 16 * 1024 * 1024, windowsHide: true },
+    (error, stdout, stderr) => {
+      const output = `${stdout || ""}${stderr || ""}`.trim();
+      if (error) {
+        const detail = output ? `\n${output}` : "";
+        reject(new Error(`Java exited with ${error.code || error.message}.${detail}`));
+        return;
+      }
+      resolve(output);
+    }
+  );
+});
+
+function resolveJavaExecutable(candidate) {
+  if (!candidate) {
+    return undefined;
+  }
+  const resolved = path.resolve(candidate.trim().replace(/^"(.*)"$/, "$1"));
+  const executableName = process.platform === "win32" ? "java.exe" : "java";
+  if (fs.existsSync(resolved) && fs.statSync(resolved).isFile()) {
+    return resolved;
+  }
+  if (path.extname(resolved).toLowerCase() === (process.platform === "win32" ? ".exe" : "")) {
+    return resolved;
+  }
+  return path.join(resolved, "bin", executableName);
+}
+
+function pathCandidates() {
+  const executableName = process.platform === "win32" ? "java.exe" : "java";
+  return (process.env.PATH || "")
+    .split(path.delimiter)
+    .filter(Boolean)
+    .map(directory => path.join(directory, executableName));
+}
+
+function parseJdkFlags(output) {
+  const flags = new Map();
+  for (const line of output.split(/\r?\n/)) {
+    const match = line.match(/^\s*([A-Za-z][A-Za-z0-9_]*)\s+([A-Za-z][A-Za-z0-9_]*)\s*=\s*(.*?)\s+\{([^}]*)\}/);
+    if (!match) {
+      continue;
+    }
+    const [, type, name, defaultValue, origin] = match;
+    flags.set(name, { type, defaultValue, origin });
+  }
+  return flags;
+}
+
+async function loadJdk(candidate) {
+  const executable = resolveJavaExecutable(candidate);
+  if (!executable) {
+    throw new Error("Enter a Java executable path or a JDK home directory.");
+  }
+  const version = await execJava(executable, ["-version"]);
+  const flagOutput = await execJava(executable, ["-XX:+PrintFlagsFinal", "-version"]);
+  const flags = parseJdkFlags(flagOutput);
+  if (flags.size === 0) {
+    throw new Error(`Could not read JVM flags from ${executable}.`);
+  }
+  return {
+    executable,
+    version: version.split(/\r?\n/)[0],
+    flags
+  };
+}
+
+function javaFlagType(type) {
+  if (type === "bool") {
+    return "Boolean";
+  }
+  if (/^(?:uintx|size_t|uint64_t)$/.test(type)) {
+    return "Integer or memory size";
+  }
+  if (/^(?:u?int|intx|int64_t)$/.test(type)) {
+    return "Integer";
+  }
+  if (/^(?:double|float)$/.test(type)) {
+    return "Number";
+  }
+  if (/^(?:ccstr|ccstrlist)$/.test(type)) {
+    return "String";
+  }
+  return type;
+}
+
+function getXXOption(name) {
+  const staticOption = optionByXXName.get(name);
+  const flag = selectedJdk && selectedJdk.flags.get(name);
+  if (!flag) {
+    return staticOption;
+  }
+  return {
+    ...(staticOption || {}),
+    label: staticOption ? staticOption.label : `-XX:${name}`,
+    type: staticOption ? staticOption.type : javaFlagType(flag.type),
+    description: staticOption
+      ? staticOption.description
+      : `Flag reported by the selected JDK (default: ${flag.defaultValue}; ${flag.origin}).`,
+    defaultValue: flag.defaultValue,
+    jdkFlag: true,
+    values: staticOption && staticOption.values
+  };
+}
+
+async function detectJdk() {
+  const configuredPath = vscode.workspace.getConfiguration("jvmIntelliSense").get("javaPath", "").trim();
+  if (configuredPath) {
+    return loadJdk(configuredPath);
+  }
+
+  const candidates = [];
+  if (process.env.JAVA_HOME) {
+    candidates.push(process.env.JAVA_HOME);
+  }
+  candidates.push(...pathCandidates().filter(candidate => fs.existsSync(candidate)));
+  const errors = [];
+  for (const candidate of [...new Set(candidates)]) {
+    try {
+      return await loadJdk(candidate);
+    } catch (error) {
+      errors.push(`${candidate}: ${error.message}`);
+    }
+  }
+  if (errors.length > 0) {
+    throw new Error(`Java was found but could not be queried.\n${errors.join("\n")}`);
+  }
+  return undefined;
+}
+
+function getJdkCompletionOptions() {
+  const staticOptions = selectedJdk
+    ? options.filter(option => {
+      if (!option.label.startsWith("-XX:")) {
+        return true;
+      }
+      const name = option.label.slice(4).replace(/^[+-]/, "").replace(/=$/, "");
+      return selectedJdk.flags.has(name);
+    })
+    : options;
+  if (!selectedJdk) {
+    return staticOptions;
+  }
+
+  const dynamicOptions = [];
+  for (const [name, flag] of selectedJdk.flags) {
+    if (optionByXXName.has(name)) {
+      continue;
+    }
+    const type = javaFlagType(flag.type);
+    if (type === "Boolean") {
+      for (const sign of ["+", "-"]) {
+        dynamicOptions.push({
+          label: `-XX:${sign}${name}`,
+          insertText: `-XX:${sign}${name}`,
+          description: `Flag reported by ${selectedJdk.version} (default: ${flag.defaultValue}; ${flag.origin}).`,
+          type
+        });
+      }
+    } else {
+      dynamicOptions.push({
+        label: `-XX:${name}=`,
+        insertText: `-XX:${name}=`,
+        description: `Flag reported by ${selectedJdk.version} (default: ${flag.defaultValue}; ${flag.origin}).`,
+        type
+      });
+    }
+  }
+  return [...staticOptions, ...dynamicOptions];
+}
 
 const options = [
   {
@@ -242,7 +422,7 @@ function getValueCompletions(token, range) {
 
   const xxMatch = token.match(/^(-XX:([A-Za-z][A-Za-z0-9_.-]*)=)(.*)$/);
   if (xxMatch) {
-    option = optionByXXName.get(xxMatch[2]);
+    option = getXXOption(xxMatch[2]);
     prefix = xxMatch[1];
     typedValue = xxMatch[3];
   } else {
@@ -284,7 +464,7 @@ function provideCompletions(document, position) {
     return [];
   }
   const typed = token.text.toLowerCase();
-  return options
+  return getJdkCompletionOptions()
     .filter(option => option.label.toLowerCase().startsWith(typed))
     .map(option => makeCompletion(option, token.range));
 }
@@ -292,7 +472,7 @@ function provideCompletions(document, position) {
 function findOption(token) {
   if (token.startsWith("-XX:")) {
     const name = token.slice(4).replace(/^[+-]/, "").split("=")[0];
-    return optionByXXName.get(name);
+    return getXXOption(name);
   }
   const exact = options.find(option => option.label === token);
   if (exact) {
@@ -410,7 +590,16 @@ function validateXXOption(token, diagnostics) {
   }
 
   const [, sign, name, value] = match;
-  const option = optionByXXName.get(name);
+  if (selectedJdk && !selectedJdk.flags.has(name)) {
+    addDiagnostic(
+      diagnostics,
+      token,
+      `-XX:${name} was not reported by the selected JDK (${selectedJdk.version}).`,
+      vscode.DiagnosticSeverity.Information
+    );
+    return;
+  }
+  const option = getXXOption(name);
   if (!option) {
     addDiagnostic(
       diagnostics,
@@ -446,10 +635,16 @@ function validateXXOption(token, diagnostics) {
   let valid = true;
   if (option.type === "Integer" || option.type === "Integer (kilobytes)") {
     valid = /^[0-9]+$/.test(value) && Number(value) > 0;
+  } else if (option.type === "Integer or memory size") {
+    valid = /^[0-9]+(?:[kKmMgGtT])?$/.test(value) && Number.parseInt(value, 10) > 0;
   } else if (option.type === "Percentage") {
     valid = /^(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)$/.test(value) && Number(value) > 0;
   } else if (option.type === "Memory size") {
     valid = validateMemorySize(value);
+  } else if (option.type === "Number") {
+    valid = value.trim() !== "" && Number.isFinite(Number(value));
+  } else if (option.type === "String") {
+    valid = value.length > 0;
   }
   if (!valid) {
     addDiagnostic(
@@ -578,12 +773,99 @@ function validateDocument(document) {
   return diagnostics;
 }
 
+function getJvmArguments(document) {
+  const tokens = [];
+  for (let lineNumber = 0; lineNumber < document.lineCount; lineNumber++) {
+    tokens.push(...tokenizeLine(document.lineAt(lineNumber).text, lineNumber, []));
+  }
+
+  const argumentsToValidate = [];
+  const optionsWithValues = new Set([
+    "--add-modules",
+    "--add-exports",
+    "--add-opens",
+    "--add-reads",
+    "--enable-native-access",
+    "--limit-modules",
+    "--patch-module",
+    "--upgrade-module-path",
+    "--module-path",
+    "--class-path",
+    "-classpath",
+    "-cp",
+    "-p"
+  ]);
+  for (let index = 0; index < tokens.length; index++) {
+    const value = tokens[index].value;
+    if (value.startsWith("@") || ["-jar", "-m", "--module", "--source"].includes(value)) {
+      break;
+    }
+    if (!value.startsWith("-")) {
+      break;
+    }
+    if (["-version", "-showversion", "--version", "--help", "--help-extra", "-help", "-?"].includes(value)) {
+      break;
+    }
+    argumentsToValidate.push(value);
+    if (optionsWithValues.has(value) && index + 1 < tokens.length) {
+      const nextValue = tokens[index + 1].value;
+      if (!nextValue.startsWith("-")) {
+        argumentsToValidate.push(tokens[++index].value);
+      }
+    }
+  }
+  return argumentsToValidate;
+}
+
+async function validateWithJava(document) {
+  const diagnostics = validateDocument(document);
+  if (diagnostics.some(diagnostic => diagnostic.severity === vscode.DiagnosticSeverity.Error)) {
+    vscode.window.showWarningMessage("Fix the argument syntax errors before validating with Java.");
+    return;
+  }
+  if (!selectedJdk) {
+    vscode.window.showWarningMessage("No JDK is available. Use JVM IntelliSense: Select JDK first.");
+    return;
+  }
+
+  const javaArguments = getJvmArguments(document);
+  if (javaArguments.length === 0) {
+    vscode.window.showInformationMessage("No JVM options were found to validate.");
+    return;
+  }
+
+  const confirmation = await vscode.window.showWarningMessage(
+    "This runs the selected Java executable with the JVM options in this file. Java agents or native agents may execute code. @files and application launch arguments are not expanded or run.",
+    "Validate",
+    "Cancel"
+  );
+  if (confirmation !== "Validate") {
+    return;
+  }
+
+  try {
+    await execJava(selectedJdk.executable, [...javaArguments, "-version"]);
+    vscode.window.showInformationMessage(`JVM options accepted by ${selectedJdk.version}.`);
+  } catch (error) {
+    vscode.window.showErrorMessage(`Java rejected the JVM options: ${error.message.slice(0, 1200)}`);
+  }
+}
+
 function activate(context) {
   const diagnosticCollection = vscode.languages.createDiagnosticCollection("jvm-args");
   const updateDiagnostics = document => {
     if (document.languageId === "jvm-args") {
       diagnosticCollection.set(document.uri, validateDocument(document));
     }
+  };
+  const updateAllDiagnostics = () => {
+    for (const document of vscode.workspace.textDocuments) {
+      updateDiagnostics(document);
+    }
+  };
+  const refreshJdk = async () => {
+    selectedJdk = await detectJdk();
+    updateAllDiagnostics();
   };
   context.subscriptions.push(
     diagnosticCollection,
@@ -596,6 +878,42 @@ function activate(context) {
   }
 
   context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration(event => {
+      if (event.affectsConfiguration("jvmIntelliSense.javaPath")) {
+        refreshJdk().catch(error => vscode.window.showErrorMessage(`Could not load the configured JDK: ${error.message}`));
+      }
+    }),
+    vscode.commands.registerCommand("jvmIntelliSense.selectJdk", async () => {
+      const configuration = vscode.workspace.getConfiguration("jvmIntelliSense");
+      const candidate = await vscode.window.showInputBox({
+        value: configuration.get("javaPath", "") || process.env.JAVA_HOME || "",
+        prompt: "Enter the Java executable path or a JDK home directory.",
+        placeHolder: process.platform === "win32" ? "C:\\Program Files\\Java\\jdk-..." : "/usr/lib/jvm/..."
+      });
+      if (!candidate || !candidate.trim()) {
+        return;
+      }
+      try {
+        const jdk = await loadJdk(candidate.trim());
+        const target = vscode.workspace.workspaceFolders
+          ? vscode.ConfigurationTarget.Workspace
+          : vscode.ConfigurationTarget.Global;
+        await configuration.update("javaPath", candidate.trim(), target);
+        selectedJdk = jdk;
+        updateAllDiagnostics();
+        vscode.window.showInformationMessage(`Selected ${jdk.version} (${jdk.executable}); loaded ${jdk.flags.size} JVM flags.`);
+      } catch (error) {
+        vscode.window.showErrorMessage(`Could not select this JDK: ${error.message}`);
+      }
+    }),
+    vscode.commands.registerCommand("jvmIntelliSense.validateOptions", async () => {
+      const editor = vscode.window.activeTextEditor;
+      if (!editor || editor.document.languageId !== "jvm-args") {
+        vscode.window.showWarningMessage("Open a JVM arguments file before validating its options.");
+        return;
+      }
+      await validateWithJava(editor.document);
+    }),
     vscode.languages.registerCompletionItemProvider(
       { language: "jvm-args" },
       { provideCompletionItems: provideCompletions },
@@ -609,6 +927,10 @@ function activate(context) {
       { provideHover }
     )
   );
+
+  refreshJdk().catch(error => {
+    vscode.window.showWarningMessage(`JDK auto-detection failed: ${error.message}`);
+  });
 }
 
 function deactivate() {}
@@ -616,5 +938,8 @@ function deactivate() {}
 module.exports = {
   activate,
   deactivate,
-  validateDocument
+  validateDocument,
+  getJvmArguments,
+  parseJdkFlags,
+  resolveJavaExecutable
 };

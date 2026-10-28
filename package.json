@@ -9,7 +9,9 @@
     "vscode": "^1.80.0"
   },
   "activationEvents": [
-    "onLanguage:jvm-args"
+    "onLanguage:jvm-args",
+    "onCommand:jvmIntelliSense.selectJdk",
+    "onCommand:jvmIntelliSense.validateOptions"
   ],
   "categories": [
     "Programming Languages"
@@ -38,6 +40,26 @@
         "scopeName": "source.jvm-args",
         "path": "./syntaxes/jvm-args.tmLanguage.json"
       }
-    ]
+    ],
+    "commands": [
+      {
+        "command": "jvmIntelliSense.selectJdk",
+        "title": "JVM IntelliSense: Select JDK"
+      },
+      {
+        "command": "jvmIntelliSense.validateOptions",
+        "title": "JVM IntelliSense: Validate Options with Java"
+      }
+    ],
+    "configuration": {
+      "title": "JVM IntelliSense",
+      "properties": {
+        "jvmIntelliSense.javaPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the Java executable or a JDK home directory. If empty, the extension detects JAVA_HOME or Java on PATH."
+        }
+      }
+    }
   }
 }
