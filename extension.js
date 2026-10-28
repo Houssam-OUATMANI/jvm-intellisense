@@ -332,7 +332,269 @@ function provideHover(document, position) {
   return new vscode.Hover(contents, token.range);
 }
 
+function tokenizeLine(line, lineNumber, diagnostics) {
+  const tokens = [];
+  let index = 0;
+  while (index < line.length && /\s/.test(line[index])) {
+    index++;
+  }
+  if (line[index] === "#") {
+    return tokens;
+  }
+
+  while (index < line.length) {
+    while (index < line.length && /\s/.test(line[index])) {
+      index++;
+    }
+    if (index >= line.length) {
+      break;
+    }
+
+    const start = index;
+    let value = "";
+    let quote;
+    while (index < line.length) {
+      const character = line[index];
+      if (quote) {
+        if (character === quote) {
+          quote = undefined;
+        } else if (character === "\\" && index + 1 < line.length) {
+          index++;
+          value += line[index];
+        } else {
+          value += character;
+        }
+        index++;
+      } else if (character === "\"" || character === "'") {
+        quote = character;
+        index++;
+      } else if (/\s/.test(character)) {
+        break;
+      } else {
+        value += character;
+        index++;
+      }
+    }
+
+    const range = new vscode.Range(lineNumber, start, lineNumber, index);
+    if (quote) {
+      diagnostics.push(new vscode.Diagnostic(
+        range,
+        "Unterminated quoted argument.",
+        vscode.DiagnosticSeverity.Error
+      ));
+    }
+    tokens.push({ value, range });
+  }
+  return tokens;
+}
+
+function addDiagnostic(diagnostics, token, message, severity) {
+  diagnostics.push(new vscode.Diagnostic(token.range, message, severity));
+}
+
+function validateMemorySize(value) {
+  return /^[0-9]+(?:[kKmMgGtT])?$/.test(value) && Number.parseInt(value, 10) > 0;
+}
+
+function validateXXOption(token, diagnostics) {
+  const match = token.value.match(/^-XX:([+-]?)([A-Za-z][A-Za-z0-9_.-]*)(?:=(.*))?$/);
+  if (!match) {
+    addDiagnostic(
+      diagnostics,
+      token,
+      "Malformed -XX option; expected -XX:+Flag, -XX:-Flag, or -XX:Name=value.",
+      vscode.DiagnosticSeverity.Error
+    );
+    return;
+  }
+
+  const [, sign, name, value] = match;
+  const option = optionByXXName.get(name);
+  if (!option) {
+    addDiagnostic(
+      diagnostics,
+      token,
+      `Not in the built-in option catalog: -XX:${name}. Its availability depends on the selected JDK and vendor.`,
+      vscode.DiagnosticSeverity.Information
+    );
+    return;
+  }
+
+  if (option.type === "Boolean") {
+    if (!sign || value !== undefined) {
+      addDiagnostic(
+        diagnostics,
+        token,
+        `-XX:${name} is a boolean flag; use -XX:+${name} or -XX:-${name}.`,
+        vscode.DiagnosticSeverity.Error
+      );
+    }
+    return;
+  }
+
+  if (sign || value === undefined || value.length === 0) {
+    addDiagnostic(
+      diagnostics,
+      token,
+      `-XX:${name} requires a value using -XX:${name}=value.`,
+      vscode.DiagnosticSeverity.Error
+    );
+    return;
+  }
+
+  let valid = true;
+  if (option.type === "Integer" || option.type === "Integer (kilobytes)") {
+    valid = /^[0-9]+$/.test(value) && Number(value) > 0;
+  } else if (option.type === "Percentage") {
+    valid = /^(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)$/.test(value) && Number(value) > 0;
+  } else if (option.type === "Memory size") {
+    valid = validateMemorySize(value);
+  }
+  if (!valid) {
+    addDiagnostic(
+      diagnostics,
+      token,
+      `Invalid value "${value}" for -XX:${name} (${option.type}).`,
+      vscode.DiagnosticSeverity.Error
+    );
+  }
+}
+
+function validateToken(token, diagnostics) {
+  const value = token.value;
+  if (value.startsWith("-XX:")) {
+    validateXXOption(token, diagnostics);
+    return;
+  }
+  if (/^-D/.test(value)) {
+    if (!/^-D[^=\s]+(?:=.*)?$/.test(value)) {
+      addDiagnostic(
+        diagnostics,
+        token,
+        "A system property must have a non-empty name, for example -Dname=value.",
+        vscode.DiagnosticSeverity.Error
+      );
+    }
+    return;
+  }
+
+  const memoryMatch = value.match(/^(-Xm[sx]|-Xss)(.*)$/);
+  if (memoryMatch) {
+    if (!memoryMatch[2] || !validateMemorySize(memoryMatch[2])) {
+      addDiagnostic(
+        diagnostics,
+        token,
+        `${memoryMatch[1]} requires a positive size such as 512m or 2g.`,
+        vscode.DiagnosticSeverity.Error
+      );
+    }
+    return;
+  }
+
+  if (/^-X[A-Za-z]/.test(value) && !options.some(option =>
+    option.label === value || (option.label === "-Xlog:gc*" && value.startsWith("-Xlog:"))
+  )) {
+    addDiagnostic(
+      diagnostics,
+      token,
+      `Not in the built-in option catalog: ${value}. Its availability depends on the selected JDK and vendor.`,
+      vscode.DiagnosticSeverity.Information
+    );
+    return;
+  }
+
+  if (/^--?[A-Za-z]/.test(value)) {
+    const optionName = value.split("=")[0];
+    if (!options.some(option => option.label.replace(/=$/, "") === optionName)) {
+      addDiagnostic(
+        diagnostics,
+        token,
+        `Not in the built-in option catalog: ${optionName}. It may be JDK- or vendor-specific.`,
+        vscode.DiagnosticSeverity.Information
+      );
+    }
+  }
+}
+
+function validateDocument(document) {
+  const diagnostics = [];
+  const occurrences = new Map();
+  const enabledCollectors = [];
+
+  for (let lineNumber = 0; lineNumber < document.lineCount; lineNumber++) {
+    const lineDiagnostics = [];
+    const tokens = tokenizeLine(document.lineAt(lineNumber).text, lineNumber, lineDiagnostics);
+    diagnostics.push(...lineDiagnostics);
+
+    for (const token of tokens) {
+      validateToken(token, diagnostics);
+
+      let key;
+      if (/^-XX:[+-]/.test(token.value)) {
+        key = `-XX:${token.value.slice(5).split("=")[0]}`;
+        const collector = token.value.match(/^-XX:\+(Use(?:G1|Z|Parallel|Serial|Shenandoah)GC)$/);
+        if (collector) {
+          enabledCollectors.push({ token, name: collector[1] });
+        }
+      } else if (/^-XX:[A-Za-z]/.test(token.value)) {
+        key = `-XX:${token.value.slice(4).split("=")[0]}`;
+      } else if (/^-Xm[sx]/.test(token.value)) {
+        key = token.value.match(/^-Xm[sx]/)[0];
+      } else if (/^-Xss/.test(token.value)) {
+        key = "-Xss";
+      } else if (/^-D[^=]+/.test(token.value)) {
+        key = token.value.split("=")[0];
+      }
+
+      if (key) {
+        const previous = occurrences.get(key);
+        if (previous) {
+          addDiagnostic(
+            diagnostics,
+            token,
+            `${key} is specified more than once; the effective value may depend on argument order.`,
+            vscode.DiagnosticSeverity.Warning
+          );
+        } else {
+          occurrences.set(key, token);
+        }
+      }
+    }
+  }
+
+  const seenCollectors = new Set();
+  for (const { token, name } of enabledCollectors) {
+    if (seenCollectors.size > 0 && !seenCollectors.has(name)) {
+      addDiagnostic(
+        diagnostics,
+        token,
+        "Multiple garbage collectors are explicitly enabled; choose a single collector.",
+        vscode.DiagnosticSeverity.Warning
+      );
+    }
+    seenCollectors.add(name);
+  }
+  return diagnostics;
+}
+
 function activate(context) {
+  const diagnosticCollection = vscode.languages.createDiagnosticCollection("jvm-args");
+  const updateDiagnostics = document => {
+    if (document.languageId === "jvm-args") {
+      diagnosticCollection.set(document.uri, validateDocument(document));
+    }
+  };
+  context.subscriptions.push(
+    diagnosticCollection,
+    vscode.workspace.onDidOpenTextDocument(updateDiagnostics),
+    vscode.workspace.onDidChangeTextDocument(event => updateDiagnostics(event.document)),
+    vscode.workspace.onDidCloseTextDocument(document => diagnosticCollection.delete(document.uri))
+  );
+  for (const document of vscode.workspace.textDocuments) {
+    updateDiagnostics(document);
+  }
+
   context.subscriptions.push(
     vscode.languages.registerCompletionItemProvider(
       { language: "jvm-args" },
@@ -353,5 +615,6 @@ function deactivate() {}
 
 module.exports = {
   activate,
-  deactivate
+  deactivate,
+  validateDocument
 };

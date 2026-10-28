@@ -10,6 +10,8 @@ Language support for JVM launch options and Java argument files in Visual Studio
 - Configures `#` line comments and quote pairing.
 - Provides initial completion and hover documentation for common JVM and Java launcher options.
 - Suggests example values for common heap, stack, and selected `-XX` options.
+- Reports malformed arguments and invalid values, plus repeated options and conflicting garbage collectors.
+- Marks options absent from the bundled catalog as informational because their availability depends on the JDK.
 
 ## Custom file associations
 
@@ -24,4 +26,4 @@ Associate other file names or extensions with the language using VS Code setting
 }
 ```
 
-The option catalog is an initial, curated baseline rather than a complete list. Option availability and defaults vary by JDK version and vendor; JDK-aware catalogs and validation are planned for a later phase.
+The option catalog is an initial, curated baseline rather than a complete list. Option availability and defaults vary by JDK version and vendor; the extension therefore reports uncatalogued options as informational rather than treating them as invalid.
