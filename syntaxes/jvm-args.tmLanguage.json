@@ -1,0 +1,182 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "JVM Arguments",
+  "scopeName": "source.jvm-args",
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#argument-files"
+    },
+    {
+      "include": "#system-properties"
+    },
+    {
+      "include": "#xx-options"
+    },
+    {
+      "include": "#x-options"
+    },
+    {
+      "include": "#launcher-options"
+    },
+    {
+      "include": "#assignments"
+    },
+    {
+      "include": "#numbers"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.number-sign.jvm-args",
+          "match": "^\\s*#.*$"
+        }
+      ]
+    },
+    "strings": {
+      "name": "string.quoted.double.jvm-args",
+      "begin": "\"",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.begin.jvm-args"
+        }
+      },
+      "end": "\"|$",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.end.jvm-args"
+        }
+      },
+      "patterns": [
+        {
+          "name": "constant.character.escape.jvm-args",
+          "match": "\\\\."
+        }
+      ]
+    },
+    "argument-files": {
+      "patterns": [
+        {
+          "name": "entity.name.filename.argument-file.jvm-args",
+          "match": "@[^\\s\"']+"
+        }
+      ]
+    },
+    "system-properties": {
+      "patterns": [
+        {
+          "match": "(-D)([^=\\s]+)?(=)?",
+          "captures": {
+            "1": {
+              "name": "keyword.control.jvm-option.jvm-args"
+            },
+            "2": {
+              "name": "variable.other.jvm-property.jvm-args"
+            },
+            "3": {
+              "name": "punctuation.separator.key-value.jvm-args"
+            }
+          }
+        }
+      ]
+    },
+    "xx-options": {
+      "patterns": [
+        {
+          "match": "(-XX:)([+-])([A-Za-z0-9_.-]+)",
+          "captures": {
+            "1": {
+              "name": "keyword.control.jvm-option.jvm-args"
+            },
+            "2": {
+              "name": "keyword.operator.jvm-args"
+            },
+            "3": {
+              "name": "variable.other.jvm-flag.jvm-args"
+            }
+          }
+        },
+        {
+          "match": "(-XX:)([A-Za-z][A-Za-z0-9_.-]*)(=)",
+          "captures": {
+            "1": {
+              "name": "keyword.control.jvm-option.jvm-args"
+            },
+            "2": {
+              "name": "variable.other.jvm-flag.jvm-args"
+            },
+            "3": {
+              "name": "punctuation.separator.key-value.jvm-args"
+            }
+          }
+        },
+        {
+          "match": "(-XX:)([A-Za-z][A-Za-z0-9_.-]*)",
+          "captures": {
+            "1": {
+              "name": "keyword.control.jvm-option.jvm-args"
+            },
+            "2": {
+              "name": "variable.other.jvm-flag.jvm-args"
+            }
+          }
+        }
+      ]
+    },
+    "x-options": {
+      "patterns": [
+        {
+          "match": "-X(?:mx|ms|mn|ss|oss|log|bootclasspath|check:jni|int|mixed|comp|batch|debug|future|noagent|noclassgc|rs|share:off|share:auto|share:on|verify|verify:all)(?=$|\\s|=|[0-9])",
+          "name": "keyword.control.jvm-option.jvm-args"
+        },
+        {
+          "match": "-X[A-Za-z][A-Za-z0-9:_-]*",
+          "name": "keyword.control.jvm-option.jvm-args"
+        }
+      ]
+    },
+    "launcher-options": {
+      "patterns": [
+        {
+          "match": "--[A-Za-z][A-Za-z0-9-]*",
+          "name": "keyword.control.launcher-option.jvm-args"
+        },
+        {
+          "match": "-(?:classpath|cp|module-path|p|upgrade-module-path|add-modules|list-modules|add-exports|add-opens|add-reads|enable-native-access|limit-modules|patch-module|m|module|jar|version|showversion|help|\\?|help-extra)",
+          "name": "keyword.control.launcher-option.jvm-args"
+        },
+        {
+          "match": "-[A-Za-z][A-Za-z0-9_-]*",
+          "name": "keyword.control.jvm-option.jvm-args"
+        }
+      ]
+    },
+    "assignments": {
+      "patterns": [
+        {
+          "match": "=",
+          "name": "punctuation.separator.key-value.jvm-args"
+        },
+        {
+          "match": "(?<=\\=)[^\\s\"']+",
+          "name": "string.unquoted.jvm-value.jvm-args"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "match": "(?<![A-Za-z0-9_])[0-9]+(?:\\.[0-9]+)?[kKmMgGtT]?(?![A-Za-z0-9_])",
+          "name": "constant.numeric.jvm-args"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "name": "jvm-intellisense",
+  "displayName": "JVM IntelliSense",
+  "description": "Language support for JVM launch options and Java argument files.",
+  "version": "0.1.0",
+  "publisher": "jvm-intellisense",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "jvm-args",
+        "aliases": [
+          "JVM Arguments",
+          "jvm-args"
+        ],
+        "filenames": [
+          "jvm.args"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "jvm-args",
+        "scopeName": "source.jvm-args",
+        "path": "./syntaxes/jvm-args.tmLanguage.json"
+      }
+    ]
+  }
+}
