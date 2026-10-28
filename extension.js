@@ -622,6 +622,21 @@ function resolveArgumentFileUri(document, reference) {
   return vscode.Uri.file(path.resolve(path.dirname(document.uri.fsPath), reference.path));
 }
 
+function matchesConfiguredExtension(filePath, extensions) {
+  const fileName = path.basename(filePath).toLowerCase();
+  return Array.isArray(extensions) && extensions.some(extension =>
+    typeof extension === "string" &&
+    /^\.[^/\\]+$/.test(extension) &&
+    fileName.endsWith(extension.toLowerCase())
+  );
+}
+
+function isConfiguredArgumentFile(document, extensions) {
+  return document.uri.scheme === "file" &&
+    document.languageId === "plaintext" &&
+    matchesConfiguredExtension(document.uri.fsPath, extensions);
+}
+
 async function enableArgumentFileLanguage(document) {
   if (document.languageId === "plaintext") {
     return vscode.languages.setTextDocumentLanguage(document, "jvm-args");
@@ -966,6 +981,22 @@ function activate(context) {
       }).finally(() => pendingArgumentFiles.delete(uri.toString()));
     }
   };
+  const updateDocumentLanguage = async document => {
+    const extensions = vscode.workspace.getConfiguration("jvmIntelliSense").get("fileExtensions", []);
+    if (!isConfiguredArgumentFile(document, extensions)) {
+      updateDiagnostics(document);
+      return;
+    }
+    const argumentDocument = await enableArgumentFileLanguage(document);
+    updateDiagnostics(argumentDocument);
+  };
+  const updateOpenDocumentLanguages = () => {
+    for (const document of vscode.workspace.textDocuments) {
+      updateDocumentLanguage(document).catch(error =>
+        vscode.window.showErrorMessage(`Could not enable JVM argument support for "${document.uri.fsPath}": ${error.message}`)
+      );
+    }
+  };
   const updateDiagnostics = document => {
     if (document.languageId === "jvm-args") {
       diagnosticCollection.set(document.uri, validateDocument(document));
@@ -973,9 +1004,7 @@ function activate(context) {
     }
   };
   const updateAllDiagnostics = () => {
-    for (const document of vscode.workspace.textDocuments) {
-      updateDiagnostics(document);
-    }
+    updateOpenDocumentLanguages();
   };
   const refreshJdk = async () => {
     selectedJdk = await detectJdk();
@@ -983,7 +1012,11 @@ function activate(context) {
   };
   context.subscriptions.push(
     diagnosticCollection,
-    vscode.workspace.onDidOpenTextDocument(updateDiagnostics),
+    vscode.workspace.onDidOpenTextDocument(document => {
+      updateDocumentLanguage(document).catch(error =>
+        vscode.window.showErrorMessage(`Could not enable JVM argument support: ${error.message}`)
+      );
+    }),
     vscode.workspace.onDidChangeTextDocument(event => updateDiagnostics(event.document)),
     vscode.workspace.onDidCloseTextDocument(document => diagnosticCollection.delete(document.uri))
   );
@@ -995,6 +1028,9 @@ function activate(context) {
     vscode.workspace.onDidChangeConfiguration(event => {
       if (event.affectsConfiguration("jvmIntelliSense.javaPath")) {
         refreshJdk().catch(error => vscode.window.showErrorMessage(`Could not load the configured JDK: ${error.message}`));
+      }
+      if (event.affectsConfiguration("jvmIntelliSense.fileExtensions")) {
+        updateOpenDocumentLanguages();
       }
     }),
     vscode.commands.registerCommand("jvmIntelliSense.selectJdk", async () => {
@@ -1061,6 +1097,8 @@ module.exports = {
   getArgumentFileReferences,
   getArgumentFileReferenceAtPosition,
   resolveArgumentFileUri,
+  matchesConfiguredExtension,
+  isConfiguredArgumentFile,
   enableArgumentFileLanguage,
   provideArgumentFileLinks,
   loadJdk,

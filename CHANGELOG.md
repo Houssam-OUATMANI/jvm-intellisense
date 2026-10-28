@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- Configurable JVM argument file extensions with `.args`, `.jvmargs`, and `.vmoptions` as defaults.
+- Marketplace icon and searchable JVM/Java extension keywords.
+- Configuration examples explaining how to avoid conflicts with generic extensions.
+
+### Changed
+
+- Argument file extensions are no longer globally claimed by the language contribution; only configured Plain Text files are automatically switched to `jvm-args`.
+
 ## [0.1.0] - 2026-10-28
 
 ### Added

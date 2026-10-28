@@ -15,6 +15,19 @@
     "url": "https://github.com/Houssam-OUATMANI/jvm-intellisense.git#issues"
   },
   "main": "./extension.js",
+  "icon": "icon.png",
+  "keywords": [
+    "java",
+    "jvm",
+    "intellisense",
+    "jvm-args",
+    "java-arguments",
+    "jvm-options",
+    "jdk",
+    "hotspot",
+    "launch-configuration",
+    "vscode-extension"
+  ],
   "scripts": {
     "test": "node --test"
   },
@@ -24,7 +37,8 @@
   "activationEvents": [
     "onLanguage:jvm-args",
     "onCommand:jvmIntelliSense.selectJdk",
-    "onCommand:jvmIntelliSense.validateOptions"
+    "onCommand:jvmIntelliSense.validateOptions",
+    "onStartupFinished"
   ],
   "categories": [
     "Programming Languages"
@@ -39,11 +53,6 @@
         ],
         "filenames": [
           "jvm.args"
-        ],
-        "extensions": [
-          ".jvmargs",
-          ".vmoptions",
-          ".args"
         ],
         "configuration": "./language-configuration.json"
       }
@@ -72,6 +81,19 @@
           "type": "string",
           "default": "",
           "description": "Path to the Java executable or a JDK home directory. If empty, the extension detects JAVA_HOME or Java on PATH."
+        },
+        "jvmIntelliSense.fileExtensions": {
+          "type": "array",
+          "default": [
+            ".args",
+            ".jvmargs",
+            ".vmoptions"
+          ],
+          "items": {
+            "type": "string",
+            "pattern": "^\\.[^/\\\\]+$"
+          },
+          "description": "File extensions to automatically treat as JVM argument files when VS Code otherwise identifies them as Plain Text. Replace the list to customize it; entries must start with a dot."
         }
       }
     }

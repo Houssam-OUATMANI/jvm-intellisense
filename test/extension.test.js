@@ -2,6 +2,7 @@ const assert = require("node:assert/strict");
 const { test } = require("node:test");
 const Module = require("node:module");
 const path = require("node:path");
+const fs = require("node:fs");
 
 const javaInvocations = [];
 const childProcess = {
@@ -67,7 +68,9 @@ const {
   getArgumentFileReferences,
   getArgumentFileReferenceAtPosition,
   enableArgumentFileLanguage,
+  isConfiguredArgumentFile,
   loadJdk,
+  matchesConfiguredExtension,
   parseJdkFlags,
   provideArgumentFileLinks,
   resolveJavaExecutable,
@@ -230,6 +233,21 @@ test("enables IntelliSense for referenced files without overriding another langu
   assert.equal(await enableArgumentFileLanguage(javaDocument), javaDocument);
 });
 
+test("matches configurable extensions without overriding other language associations", () => {
+  const defaults = [".args", ".jvmargs", ".vmoptions"];
+  assert(matchesConfiguredExtension("C:\\workspace\\jvm.args", defaults));
+  assert(matchesConfiguredExtension("C:\\workspace\\JAVA.JVMARGS", defaults));
+  assert(!matchesConfiguredExtension("C:\\workspace\\settings.json", defaults));
+  assert(matchesConfiguredExtension("C:\\workspace\\launch.jvmopts", [".jvmopts"]));
+  assert(!matchesConfiguredExtension("C:\\workspace\\launch.jvmargs", [".jvmopts"]));
+  assert(!matchesConfiguredExtension("C:\\workspace\\jvm.args", ["args", ".."]));
+
+  const uri = { scheme: "file", fsPath: "C:\\workspace\\jvm.args" };
+  assert(isConfiguredArgumentFile({ uri, languageId: "plaintext" }, defaults));
+  assert(!isConfiguredArgumentFile({ uri, languageId: "java" }, defaults));
+  assert(!isConfiguredArgumentFile({ uri: { ...uri, scheme: "untitled" }, languageId: "plaintext" }, defaults));
+});
+
 test("provides one navigation link spanning the full argument-file reference", async () => {
   const sourcePath = path.resolve(path.join(path.sep, "workspace", "jvm.args"));
   const targetPath = path.resolve(path.join(path.sep, "workspace", "config", "jvm-blaa"));
@@ -268,4 +286,26 @@ test("resolves JDK homes and preserves explicit Java executable paths", () => {
 
   const executable = path.resolve(path.join(path.sep, "custom", process.platform === "win32" ? "java.exe" : "java"));
   assert.equal(resolveJavaExecutable(executable), executable);
+});
+
+test("package metadata exposes customizable extensions and Marketplace icon", () => {
+  const manifest = require("../package.json");
+  const settings = manifest.contributes.configuration.properties;
+
+  assert.equal(manifest.version, "0.1.0");
+  assert.equal(manifest.license, "MIT");
+  assert.equal(manifest.icon, "icon.png");
+  const iconPath = path.join(__dirname, "..", manifest.icon);
+  const icon = fs.readFileSync(iconPath);
+  assert.equal(icon.toString("hex", 0, 8), "89504e470d0a1a0a");
+  assert.equal(icon.readUInt32BE(16), 500);
+  assert.equal(icon.readUInt32BE(20), 500);
+  assert(manifest.keywords.includes("jvm"));
+  assert(manifest.keywords.includes("java"));
+  assert.deepEqual(settings["jvmIntelliSense.fileExtensions"].default, [
+    ".args",
+    ".jvmargs",
+    ".vmoptions"
+  ]);
+  assert(!manifest.contributes.languages[0].extensions);
 });

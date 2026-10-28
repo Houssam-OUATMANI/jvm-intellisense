@@ -10,7 +10,7 @@ Language support for JVM launch options and Java argument files in Visual Studio
 
 ## Current features
 
-- Associates `jvm.args`, `.args`, `.jvmargs`, and `.vmoptions` files with the `jvm-args` language.
+- Associates `jvm.args` and configurable argument-file extensions with the `jvm-args` language.
 - Highlights JVM options, system properties, values, comments, quoted arguments, and `@file` references.
 - Uses standard TextMate scopes so colors come from the active VS Code theme.
 - Opens `@file` references with one native document link spanning the entire reference (Ctrl+Click), resolves paths relative to the containing argument file, and enables IntelliSense for referenced files.
@@ -25,18 +25,33 @@ Language support for JVM launch options and Java argument files in Visual Studio
 
 ## Custom file associations
 
-Associate other file names or extensions with the language using VS Code settings:
+By default, `.args`, `.jvmargs`, and `.vmoptions` files are treated as JVM argument files when VS Code otherwise identifies them as Plain Text. Since extensions such as `.args` are generic and may conflict with other tools, replace the defaults with the extensions you use in VS Code settings:
+
+```json
+{
+  "jvmIntelliSense.fileExtensions": [
+    ".jvmopts",
+    ".launchargs"
+  ]
+}
+```
+
+Entries must include the leading dot. The setting replaces the default list, so add any defaults you still want to keep. For example, set it to `[".jvmopts"]` to stop automatically claiming `.args` files. Close and reopen files after changing this setting. Other language associations are left untouched.
+
+Alternatively, explicitly associate a filename or glob through VS Code's built-in `files.associations` setting:
 
 ```json
 {
   "files.associations": {
-    "*.vmoptions": "jvm-args",
+    "*.launchargs": "jvm-args",
     "custom-launch-options.txt": "jvm-args"
   }
 }
 ```
 
 Files referenced from a `jvm-args` file are also opened with the JVM argument language when their current language is Plain Text, so completion and diagnostics work for extensionless files such as `@jvm-blaa`.
+
+If another extension already claims an extension, its language association takes precedence. You can explicitly use `files.associations` to assign a chosen pattern to `jvm-args`.
 
 The option catalog is an initial, curated baseline rather than a complete list. Option availability and defaults vary by JDK version and vendor; when a JDK is selected, `-XX` flags are read from that JVM and options it does not report remain informational.
 
