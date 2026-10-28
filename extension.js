@@ -58,6 +58,21 @@ function parseJdkFlags(output) {
   return flags;
 }
 
+function parseJavaMajorVersion(versionOutput) {
+  const match = versionOutput.match(/version\s+"([^"]+)"/i) ||
+    versionOutput.match(/(?:openjdk|java)\s+([0-9][^\s]*)/i);
+  if (!match) {
+    return undefined;
+  }
+  const version = match[1];
+  const legacyVersion = version.match(/^1\.(\d+)/);
+  if (legacyVersion) {
+    return Number(legacyVersion[1]);
+  }
+  const majorVersion = version.match(/^(\d+)/);
+  return majorVersion ? Number(majorVersion[1]) : undefined;
+}
+
 async function loadJdk(candidate) {
   const executable = resolveJavaExecutable(candidate);
   if (!executable) {
@@ -76,6 +91,7 @@ async function loadJdk(candidate) {
   return {
     executable,
     version: version.split(/\r?\n/)[0],
+    majorVersion: parseJavaMajorVersion(version),
     flags
   };
 }
@@ -190,6 +206,14 @@ const options = [
     insertText: "-XX:+UnlockDiagnosticVMOptions",
     description: "Enable diagnostic JVM options. This must precede diagnostic flags that require unlocking.",
     type: "Boolean"
+  },
+  {
+    label: "-XX:+UseConcMarkSweepGC",
+    insertText: "-XX:+UseConcMarkSweepGC",
+    description: "Use the Concurrent Mark Sweep garbage collector. Deprecated in Java 9 and removed in Java 14.",
+    type: "Boolean",
+    deprecatedSince: 9,
+    removedSince: 14
   },
   {
     label: "-XX:+UseG1GC",
@@ -681,7 +705,7 @@ function validateMemorySize(value) {
   return /^[0-9]+(?:[kKmMgGtT])?$/.test(value) && Number.parseInt(value, 10) > 0;
 }
 
-function validateXXOption(token, diagnostics) {
+function validateXXOption(token, diagnostics, jdk = selectedJdk) {
   const match = token.value.match(/^-XX:([+-]?)([A-Za-z][A-Za-z0-9_.-]*)(?:=(.*))?$/);
   if (!match) {
     addDiagnostic(
@@ -694,11 +718,34 @@ function validateXXOption(token, diagnostics) {
   }
 
   const [, sign, name, value] = match;
-  if (selectedJdk && !selectedJdk.flags.has(name)) {
+  const catalogOption = optionByXXName.get(name);
+  if (catalogOption && catalogOption.removedSince && (!jdk || (jdk.majorVersion && jdk.majorVersion >= catalogOption.removedSince))) {
+    const message = jdk && jdk.majorVersion
+      ? `-XX:${name} was removed in Java ${catalogOption.removedSince} and is not supported by the selected Java ${jdk.majorVersion}.`
+      : `-XX:${name} was removed in Java ${catalogOption.removedSince}; it is not supported by modern HotSpot JVMs.`;
     addDiagnostic(
       diagnostics,
       token,
-      `-XX:${name} was not reported by the selected JDK (${selectedJdk.version}).`,
+      message,
+      jdk && jdk.majorVersion
+        ? vscode.DiagnosticSeverity.Error
+        : vscode.DiagnosticSeverity.Information
+    );
+    return;
+  }
+  if (catalogOption && catalogOption.deprecatedSince && jdk && jdk.majorVersion && jdk.majorVersion >= catalogOption.deprecatedSince) {
+    addDiagnostic(
+      diagnostics,
+      token,
+      `-XX:${name} was deprecated in Java ${catalogOption.deprecatedSince}${catalogOption.removedSince ? ` and removed in Java ${catalogOption.removedSince}` : ""}.`,
+      vscode.DiagnosticSeverity.Warning
+    );
+  }
+  if (jdk && !jdk.flags.has(name)) {
+    addDiagnostic(
+      diagnostics,
+      token,
+      `-XX:${name} was not reported by the selected JDK (${jdk.version}).`,
       vscode.DiagnosticSeverity.Information
     );
     return;
@@ -760,10 +807,19 @@ function validateXXOption(token, diagnostics) {
   }
 }
 
-function validateToken(token, diagnostics) {
+function validateToken(token, diagnostics, jdk = selectedJdk) {
   const value = token.value;
   if (value.startsWith("-XX:")) {
-    validateXXOption(token, diagnostics);
+    validateXXOption(token, diagnostics, jdk);
+    return;
+  }
+  if (value.startsWith("@") && value.length > 1) {
+    addDiagnostic(
+      diagnostics,
+      token,
+      "Nested @argument-file references are not expanded by the Java launcher. This reference supports editor navigation and IntelliSense only; move the options into the top-level file or use a wrapper script.",
+      vscode.DiagnosticSeverity.Warning
+    );
     return;
   }
   if (/^-D/.test(value)) {
@@ -816,7 +872,7 @@ function validateToken(token, diagnostics) {
   }
 }
 
-function validateDocument(document) {
+function validateDocument(document, jdk = selectedJdk) {
   const diagnostics = [];
   const occurrences = new Map();
   const enabledCollectors = [];
@@ -827,7 +883,7 @@ function validateDocument(document) {
     diagnostics.push(...lineDiagnostics);
 
     for (const token of tokens) {
-      validateToken(token, diagnostics);
+      validateToken(token, diagnostics, jdk);
 
       let key;
       if (/^-XX:[+-]/.test(token.value)) {
@@ -959,6 +1015,7 @@ function activate(context) {
   const diagnosticCollection = vscode.languages.createDiagnosticCollection("jvm-args");
   const activatedArgumentFiles = new Set();
   const pendingArgumentFiles = new Set();
+  const automaticallyManagedDocuments = new Set();
   const activateReferencedFiles = document => {
     if (document.languageId !== "jvm-args" || document.uri.scheme !== "file") {
       return;
@@ -970,7 +1027,11 @@ function activate(context) {
       }
       pendingArgumentFiles.add(uri.toString());
       vscode.workspace.fs.stat(uri).then(() => vscode.workspace.openTextDocument(uri)).then(async referencedDocument => {
+        const wasPlainText = referencedDocument.languageId === "plaintext";
         referencedDocument = await enableArgumentFileLanguage(referencedDocument);
+        if (wasPlainText && referencedDocument.languageId === "jvm-args") {
+          automaticallyManagedDocuments.add(uri.toString());
+        }
         activatedArgumentFiles.add(uri.toString());
         updateDiagnostics(referencedDocument);
         activateReferencedFiles(referencedDocument);
@@ -983,19 +1044,17 @@ function activate(context) {
   };
   const updateDocumentLanguage = async document => {
     const extensions = vscode.workspace.getConfiguration("jvmIntelliSense").get("fileExtensions", []);
-    if (!isConfiguredArgumentFile(document, extensions)) {
-      updateDiagnostics(document);
+    if (document.languageId !== "plaintext" || !isConfiguredArgumentFile(document, extensions)) {
+      if (document.languageId === "jvm-args") {
+        updateDiagnostics(document);
+      }
       return;
     }
     const argumentDocument = await enableArgumentFileLanguage(document);
-    updateDiagnostics(argumentDocument);
-  };
-  const updateOpenDocumentLanguages = () => {
-    for (const document of vscode.workspace.textDocuments) {
-      updateDocumentLanguage(document).catch(error =>
-        vscode.window.showErrorMessage(`Could not enable JVM argument support for "${document.uri.fsPath}": ${error.message}`)
-      );
+    if (argumentDocument.languageId === "jvm-args") {
+      automaticallyManagedDocuments.add(document.uri.toString());
     }
+    updateDiagnostics(argumentDocument);
   };
   const updateDiagnostics = document => {
     if (document.languageId === "jvm-args") {
@@ -1003,8 +1062,77 @@ function activate(context) {
       activateReferencedFiles(document);
     }
   };
-  const updateAllDiagnostics = () => {
-    updateOpenDocumentLanguages();
+  const getReferencedFileUris = extensions => {
+    const documents = new Map(vscode.workspace.textDocuments.map(document => [document.uri.toString(), document]));
+    const referencedUris = new Set();
+    const visited = new Set();
+    const visit = document => {
+      const sourceKey = document.uri.toString();
+      if (visited.has(sourceKey)) {
+        return;
+      }
+      visited.add(sourceKey);
+      for (const reference of getArgumentFileReferences(document)) {
+        const uri = resolveArgumentFileUri(document, reference);
+        if (!uri) {
+          continue;
+        }
+        const targetKey = uri.toString();
+        referencedUris.add(targetKey);
+        const targetDocument = documents.get(targetKey);
+        if (targetDocument && (targetDocument.languageId === "jvm-args" || targetDocument.languageId === "plaintext")) {
+          visit(targetDocument);
+        }
+      }
+    };
+
+    for (const document of documents.values()) {
+      const key = document.uri.toString();
+      const isArgumentLanguage = document.languageId === "jvm-args" || document.languageId === "plaintext";
+      const isConfiguredRoot = isArgumentLanguage &&
+        document.uri.scheme === "file" &&
+        matchesConfiguredExtension(document.uri.fsPath, extensions);
+      const isExplicitLanguageRoot = document.uri.scheme === "file" &&
+        document.languageId === "jvm-args" &&
+        !automaticallyManagedDocuments.has(key);
+      if (isConfiguredRoot || isExplicitLanguageRoot) {
+        visit(document);
+      }
+    }
+    return referencedUris;
+  };
+  const updateOpenDocumentLanguages = async () => {
+    const extensions = vscode.workspace.getConfiguration("jvmIntelliSense").get("fileExtensions", []);
+    const referencedUris = getReferencedFileUris(extensions);
+    for (const document of vscode.workspace.textDocuments) {
+      const key = document.uri.toString();
+      const extensionMatches = document.uri.scheme === "file" &&
+        matchesConfiguredExtension(document.uri.fsPath, extensions);
+      const isReferenced = referencedUris.has(key);
+
+      if (automaticallyManagedDocuments.has(key) && document.languageId !== "jvm-args") {
+        automaticallyManagedDocuments.delete(key);
+      } else if (automaticallyManagedDocuments.has(key) && !extensionMatches && !isReferenced) {
+        const plainTextDocument = await vscode.languages.setTextDocumentLanguage(document, "plaintext");
+        automaticallyManagedDocuments.delete(key);
+        activatedArgumentFiles.delete(key);
+        diagnosticCollection.delete(plainTextDocument.uri);
+        continue;
+      }
+
+      if (document.languageId === "plaintext" && (extensionMatches || isReferenced)) {
+        const argumentDocument = await enableArgumentFileLanguage(document);
+        if (argumentDocument.languageId === "jvm-args") {
+          automaticallyManagedDocuments.add(key);
+          updateDiagnostics(argumentDocument);
+        }
+      } else if (document.languageId === "jvm-args") {
+        updateDiagnostics(document);
+      }
+    }
+  };
+  const updateAllDiagnostics = async () => {
+    await updateOpenDocumentLanguages();
   };
   const refreshJdk = async () => {
     selectedJdk = await detectJdk();
@@ -1018,11 +1146,16 @@ function activate(context) {
       );
     }),
     vscode.workspace.onDidChangeTextDocument(event => updateDiagnostics(event.document)),
-    vscode.workspace.onDidCloseTextDocument(document => diagnosticCollection.delete(document.uri))
+    vscode.workspace.onDidCloseTextDocument(document => {
+      const key = document.uri.toString();
+      automaticallyManagedDocuments.delete(key);
+      activatedArgumentFiles.delete(key);
+      diagnosticCollection.delete(document.uri);
+    })
   );
-  for (const document of vscode.workspace.textDocuments) {
-    updateDiagnostics(document);
-  }
+  updateOpenDocumentLanguages().catch(error =>
+    vscode.window.showErrorMessage(`Could not apply JVM argument file extensions: ${error.message}`)
+  );
 
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration(event => {
@@ -1030,7 +1163,9 @@ function activate(context) {
         refreshJdk().catch(error => vscode.window.showErrorMessage(`Could not load the configured JDK: ${error.message}`));
       }
       if (event.affectsConfiguration("jvmIntelliSense.fileExtensions")) {
-        updateOpenDocumentLanguages();
+        updateOpenDocumentLanguages().catch(error =>
+          vscode.window.showErrorMessage(`Could not apply JVM argument file extensions: ${error.message}`)
+        );
       }
     }),
     vscode.commands.registerCommand("jvmIntelliSense.selectJdk", async () => {
@@ -1050,7 +1185,7 @@ function activate(context) {
           : vscode.ConfigurationTarget.Global;
         await configuration.update("javaPath", candidate.trim(), target);
         selectedJdk = jdk;
-        updateAllDiagnostics();
+        await updateAllDiagnostics();
         vscode.window.showInformationMessage(`Selected ${jdk.version} (${jdk.executable}); loaded ${jdk.flags.size} JVM flags.`);
       } catch (error) {
         vscode.window.showErrorMessage(`Could not select this JDK: ${error.message}`);
@@ -1093,6 +1228,7 @@ module.exports = {
   activate,
   deactivate,
   validateDocument,
+  parseJavaMajorVersion,
   getJvmArguments,
   getArgumentFileReferences,
   getArgumentFileReferenceAtPosition,

@@ -9,10 +9,13 @@ All notable changes to this project are documented in this file.
 - Configurable JVM argument file extensions with `.args`, `.jvmargs`, and `.vmoptions` as defaults.
 - Marketplace icon and searchable JVM/Java extension keywords.
 - Configuration examples explaining how to avoid conflicts with generic extensions.
+- English warnings and errors for known deprecated/removed flags, including CMS removal in Java 14.
+- A warning explaining that nested Java argument-file references are not expanded by the launcher.
 
 ### Changed
 
 - Argument file extensions are no longer globally claimed by the language contribution; only configured Plain Text files are automatically switched to `jvm-args`.
+- Open documents are immediately switched into or out of JVM argument support when the extension list changes.
 
 ## [0.1.0] - 2026-10-28
 

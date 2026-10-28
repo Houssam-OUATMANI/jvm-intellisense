@@ -18,6 +18,7 @@ Language support for JVM launch options and Java argument files in Visual Studio
 - Provides initial completion and hover documentation for common JVM and Java launcher options.
 - Suggests example values for common heap, stack, and selected `-XX` options.
 - Reports malformed arguments and invalid values, plus repeated options and conflicting garbage collectors.
+- Provides English diagnostics for known deprecated or removed JVM flags and warns that nested `@file` references are for editor navigation only.
 - Marks options absent from the bundled catalog as informational because their availability depends on the JDK.
 - Detects Java from `JAVA_HOME` or `PATH`, or lets you select a Java executable/JDK home.
 - Loads `-XX` flags from the selected JVM with `-XX:+PrintFlagsFinal` and adapts flag completions and diagnostics.
@@ -36,7 +37,7 @@ By default, `.args`, `.jvmargs`, and `.vmoptions` files are treated as JVM argum
 }
 ```
 
-Entries must include the leading dot. The setting replaces the default list, so add any defaults you still want to keep. For example, set it to `[".jvmopts"]` to stop automatically claiming `.args` files. Close and reopen files after changing this setting. Other language associations are left untouched.
+Entries must include the leading dot. The setting replaces the default list, so add any defaults you still want to keep. For example, set it to `[".jvmopts"]` to stop automatically claiming `.args` files. Changes are applied immediately to open files. Other language associations are left untouched.
 
 Alternatively, explicitly associate a filename or glob through VS Code's built-in `files.associations` setting:
 
@@ -50,6 +51,8 @@ Alternatively, explicitly associate a filename or glob through VS Code's built-i
 ```
 
 Files referenced from a `jvm-args` file are also opened with the JVM argument language when their current language is Plain Text, so completion and diagnostics work for extensionless files such as `@jvm-blaa`.
+
+Java argument files do not expand nested `@file` references. The extension supports these references for navigation and IntelliSense, but Java will not recursively load their contents; move those options into the top-level argument file or use a wrapper script to combine the files.
 
 If another extension already claims an extension, its language association takes precedence. You can explicitly use `files.associations` to assign a chosen pattern to `jvm-args`.
 

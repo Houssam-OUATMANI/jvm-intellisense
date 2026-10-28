@@ -71,11 +71,13 @@ const {
   isConfiguredArgumentFile,
   loadJdk,
   matchesConfiguredExtension,
+  parseJavaMajorVersion,
   parseJdkFlags,
   provideArgumentFileLinks,
   resolveJavaExecutable,
   resolveArgumentFileUri,
-  validateDocument
+  validateDocument,
+  activate
 } = require("../extension");
 Module._load = originalLoad;
 
@@ -116,6 +118,14 @@ test("loads diagnostic flags by unlocking diagnostic options first", async () =>
   ]);
   assert.equal(jdk.flags.has("UnlockDiagnosticVMOptions"), true);
   assert.equal(jdk.version, 'java version "25.0.3"');
+  assert.equal(jdk.majorVersion, 25);
+});
+
+test("parses current and legacy Java version strings", () => {
+  assert.equal(parseJavaMajorVersion('java version "1.8.0_402"'), 8);
+  assert.equal(parseJavaMajorVersion('openjdk version "17.0.10" 2024-01-16'), 17);
+  assert.equal(parseJavaMajorVersion('java version "25.0.3" 2026-04-21 LTS'), 25);
+  assert.equal(parseJavaMajorVersion("Java version unavailable"), undefined);
 });
 
 test("reports invalid values and unterminated quotes as errors", () => {
@@ -148,6 +158,53 @@ test("leaves uncatalogued options informational when no JDK is selected", () => 
   assert.equal(diagnostics.length, 2);
   assert(diagnostics.every(item => item.severity === vscode.DiagnosticSeverity.Information));
   assert(diagnostics.every(item => item.message.includes("Not in the built-in option catalog")));
+});
+
+test("classifies the removed CMS option using the selected Java version", () => {
+  const flag = { type: "bool", defaultValue: "false", origin: "product" };
+  const option = "-XX:+UseConcMarkSweepGC";
+  const java8 = validateDocument(documentFrom(option), {
+    executable: "java",
+    version: 'java version "1.8.0_402"',
+    majorVersion: 8,
+    flags: new Map([["UseConcMarkSweepGC", flag]])
+  });
+  assert.deepEqual(java8, []);
+
+  const java11 = validateDocument(documentFrom(option), {
+    executable: "java",
+    version: 'openjdk version "11.0.22"',
+    majorVersion: 11,
+    flags: new Map([["UseConcMarkSweepGC", flag]])
+  });
+  assert(java11.some(item =>
+    item.severity === vscode.DiagnosticSeverity.Warning &&
+    item.message.includes("deprecated in Java 9") &&
+    item.message.includes("removed in Java 14")
+  ));
+
+  const java25 = validateDocument(documentFrom(option), {
+    executable: "java",
+    version: 'java version "25.0.3"',
+    majorVersion: 25,
+    flags: new Map()
+  });
+  assert.equal(java25.length, 1);
+  assert.equal(java25[0].severity, vscode.DiagnosticSeverity.Error);
+  assert(java25[0].message.includes("removed in Java 14"));
+  assert(java25[0].message.includes("selected Java 25"));
+});
+
+test("warns that nested argument-file references are editor-only", () => {
+  const diagnostics = validateDocument(documentFrom([
+    "@child.args",
+    "# @commented.args",
+    "-Xmx1g"
+  ].join("\n")));
+  assert.equal(diagnostics.length, 1);
+  assert.equal(diagnostics[0].severity, vscode.DiagnosticSeverity.Warning);
+  assert(diagnostics[0].message.includes("not expanded by the Java launcher"));
+  assert(diagnostics[0].message.includes("wrapper script"));
 });
 
 test("accepts valid arguments and ignores comments and quoted spaces", () => {
@@ -308,4 +365,76 @@ test("package metadata exposes customizable extensions and Marketplace icon", ()
     ".vmoptions"
   ]);
   assert(!manifest.contributes.languages[0].extensions);
+});
+
+test("reapplies extension changes immediately and restores removed files to Plain Text", async () => {
+  let extensions = [".args"];
+  let configurationListener;
+  let openDocumentListener;
+  const documents = [
+    { uri: vscode.Uri.file("C:\\workspace\\one.args"), languageId: "plaintext", lineCount: 0, lineAt: () => ({ text: "" }) },
+    { uri: vscode.Uri.file("C:\\workspace\\two.blabla"), languageId: "plaintext", lineCount: 0, lineAt: () => ({ text: "" }) },
+    { uri: vscode.Uri.file("C:\\workspace\\owned.args"), languageId: "java", lineCount: 1, lineAt: () => ({ text: "@one.args" }) }
+  ];
+  const diagnostics = new Map();
+  vscode.languages = {
+    setTextDocumentLanguage: async (document, languageId) => {
+      document.languageId = languageId;
+      return document;
+    },
+    createDiagnosticCollection: () => ({
+      set: (uri, values) => diagnostics.set(uri.toString(), values),
+      delete: uri => diagnostics.delete(uri.toString()),
+      dispose() {}
+    }),
+    registerDocumentLinkProvider: () => ({ dispose() {} }),
+    registerCompletionItemProvider: () => ({ dispose() {} }),
+    registerHoverProvider: () => ({ dispose() {} })
+  };
+  vscode.workspace = {
+    textDocuments: documents,
+    workspaceFolders: undefined,
+    getConfiguration: () => ({
+      get: (name, fallback) => name === "fileExtensions" ? extensions : fallback,
+      update: async () => {}
+    }),
+    onDidOpenTextDocument: listener => (openDocumentListener = listener, { dispose() {} }),
+    onDidChangeTextDocument: () => ({ dispose() {} }),
+    onDidCloseTextDocument: () => ({ dispose() {} }),
+    onDidChangeConfiguration: listener => (configurationListener = listener, { dispose() {} }),
+    fs: { stat: async () => {} },
+    openTextDocument: async uri => documents.find(document => document.uri.toString() === uri.toString())
+  };
+  vscode.commands = { registerCommand: () => ({ dispose() {} }) };
+  vscode.window = {
+    showErrorMessage: message => { throw new Error(message); },
+    showWarningMessage: () => {},
+    showInformationMessage: () => {}
+  };
+
+  activate({ subscriptions: [] });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(documents[0].languageId, "jvm-args");
+  assert.equal(documents[1].languageId, "plaintext");
+  assert.equal(documents[2].languageId, "java");
+
+  extensions = [".blabla"];
+  configurationListener({ affectsConfiguration: name => name === "jvmIntelliSense.fileExtensions" });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(documents[0].languageId, "plaintext");
+  assert.equal(documents[1].languageId, "jvm-args");
+  assert.equal(documents[2].languageId, "java");
+  assert.equal(diagnostics.has(documents[0].uri.toString()), false);
+
+  extensions = [".args"];
+  configurationListener({ affectsConfiguration: name => name === "jvmIntelliSense.fileExtensions" });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(documents[0].languageId, "jvm-args");
+  assert.equal(documents[1].languageId, "plaintext");
+
+  const opened = { uri: vscode.Uri.file("C:\\workspace\\three.args"), languageId: "plaintext", lineCount: 0, lineAt: () => ({ text: "" }) };
+  documents.push(opened);
+  openDocumentListener(opened);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(opened.languageId, "jvm-args");
 });
