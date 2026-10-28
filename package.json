@@ -1,6 +1,6 @@
 {
-  "name": "jvm-intellisense",
-  "displayName": "JVM IntelliSense",
+  "name": "jvm-sense",
+  "displayName": "JVM Sense",
   "description": "Language support for JVM launch options and Java argument files.",
   "version": "0.1.0",
   "license": "MIT",
