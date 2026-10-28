@@ -3,8 +3,12 @@
   "displayName": "JVM IntelliSense",
   "description": "Language support for JVM launch options and Java argument files.",
   "version": "0.1.0",
+  "license": "MIT",
   "publisher": "jvm-intellisense",
   "main": "./extension.js",
+  "scripts": {
+    "test": "node --test"
+  },
   "engines": {
     "vscode": "^1.80.0"
   },

@@ -2,6 +2,12 @@
 
 Language support for JVM launch options and Java argument files in Visual Studio Code.
 
+## Requirements
+
+- Visual Studio Code 1.80 or later.
+- Node.js 18 or later to run the test suite.
+- A JDK is optional for editing and static diagnostics; JDK-aware completions and real JVM validation require a selected Java executable.
+
 ## Current features
 
 - Associates `jvm.args` with the `jvm-args` language.
@@ -36,3 +42,17 @@ The option catalog is an initial, curated baseline rather than a complete list. 
 The extension detects Java from `JAVA_HOME` and then `PATH`. To choose another installation, run **JVM IntelliSense: Select JDK** or set `jvmIntelliSense.javaPath` to a Java executable or JDK home directory.
 
 Run **JVM IntelliSense: Validate Options with Java** from a JVM argument file to check its JVM options with the selected executable. The command asks for confirmation because Java agent options may execute code. It does not expand `@file` references or launch an application.
+
+## Development
+
+Run the automated tests with:
+
+```sh
+npm test
+```
+
+The test suite uses Node.js built-ins and does not require installing project dependencies.
+
+## License
+
+This project is distributed under the [MIT License](./LICENSE).
