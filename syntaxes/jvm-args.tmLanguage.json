@@ -7,10 +7,10 @@
       "include": "#comments"
     },
     {
-      "include": "#strings"
+      "include": "#argument-files"
     },
     {
-      "include": "#argument-files"
+      "include": "#strings"
     },
     {
       "include": "#system-properties"
@@ -64,8 +64,21 @@
     "argument-files": {
       "patterns": [
         {
-          "name": "entity.name.filename.argument-file.jvm-args",
-          "match": "@[^\\s\"']+"
+          "match": "(@)(?:\"([^\"]+)\"|'([^']+)'|([^\\s\"']+))",
+          "captures": {
+            "1": {
+              "name": "keyword.control.import.jvm-args"
+            },
+            "2": {
+              "name": "string.other.link.jvm-args"
+            },
+            "3": {
+              "name": "string.other.link.jvm-args"
+            },
+            "4": {
+              "name": "string.other.link.jvm-args"
+            }
+          }
         }
       ]
     },

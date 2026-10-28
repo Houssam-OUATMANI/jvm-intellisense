@@ -42,7 +42,8 @@
         ],
         "extensions": [
           ".jvmargs",
-          ".vmoptions"
+          ".vmoptions",
+          ".args"
         ],
         "configuration": "./language-configuration.json"
       }

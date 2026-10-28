@@ -22,6 +22,8 @@ const vscode = {
   Range: class Range {
     constructor(startLine, start, endLine, end) {
       Object.assign(this, { startLine, start, endLine, end });
+      this.start = { line: startLine, character: start };
+      this.end = { line: endLine, character: end };
     }
   },
   Diagnostic: class Diagnostic {
@@ -33,6 +35,25 @@ const vscode = {
     Error: 0,
     Warning: 1,
     Information: 2
+  },
+  Uri: {
+    file(fsPath) {
+      return {
+        scheme: "file",
+        fsPath,
+        toString: () => `file://${fsPath}`
+      };
+    }
+  },
+  Position: class Position {
+    constructor(line, character) {
+      Object.assign(this, { line, character });
+    }
+  },
+  Location: class Location {
+    constructor(uri, range) {
+      Object.assign(this, { uri, range });
+    }
   }
 };
 
@@ -48,9 +69,14 @@ Module._load = function(request, parent, isMain) {
 };
 const {
   getJvmArguments,
+  getArgumentFileReferences,
+  getArgumentFileReferenceAtPosition,
+  enableArgumentFileLanguage,
   loadJdk,
   parseJdkFlags,
+  provideArgumentFileDefinition,
   resolveJavaExecutable,
+  resolveArgumentFileUri,
   validateDocument
 } = require("../extension");
 Module._load = originalLoad;
@@ -164,6 +190,70 @@ test("does not expand @files or include application launch targets", () => {
     getJvmArguments(documentFrom("--module-path modules -m sample/module.Main")),
     ["--module-path", "modules"]
   );
+});
+
+test("finds quoted and unquoted argument-file references but ignores comments", () => {
+  const document = documentFrom([
+    "@jvm-blaa",
+    '@"config/extra args"',
+    "# @ignored.args"
+  ].join("\n"));
+  const references = getArgumentFileReferences(document);
+
+  assert.deepEqual(references.map(reference => reference.path), [
+    "jvm-blaa",
+    "config/extra args"
+  ]);
+  assert.equal(getArgumentFileReferenceAtPosition(document, { line: 0, character: 2 }).path, "jvm-blaa");
+  assert.equal(getArgumentFileReferenceAtPosition(document, { line: 2, character: 4 }), undefined);
+});
+
+test("argument-file grammar uses visible theme-aware token scopes", () => {
+  const grammar = require("../syntaxes/jvm-args.tmLanguage.json");
+  const rule = grammar.repository["argument-files"].patterns[0];
+  const match = new RegExp(rule.match).exec("@jvm-blaa");
+
+  assert(match);
+  assert.equal(rule.captures["1"].name, "keyword.control.import.jvm-args");
+  assert.equal(rule.captures["4"].name, "string.other.link.jvm-args");
+  assert.equal(match[1], "@");
+  assert.equal(match[4], "jvm-blaa");
+});
+
+test("enables IntelliSense for referenced files without overriding another language", async () => {
+  vscode.languages = {
+    setTextDocumentLanguage: async (document, languageId) => ({
+      ...document,
+      languageId
+    })
+  };
+  const plainTextDocument = { languageId: "plaintext" };
+  const enabled = await enableArgumentFileLanguage(plainTextDocument);
+  assert.equal(enabled.languageId, "jvm-args");
+
+  const javaDocument = { languageId: "java" };
+  assert.equal(await enableArgumentFileLanguage(javaDocument), javaDocument);
+});
+
+test("resolves argument references relative to their file and provides navigation", async () => {
+  const sourcePath = path.resolve(path.join(path.sep, "workspace", "jvm.args"));
+  const targetPath = path.resolve(path.join(path.sep, "workspace", "config", "jvm-blaa"));
+  const document = Object.assign(documentFrom("@config/jvm-blaa"), {
+    uri: { scheme: "file", fsPath: sourcePath }
+  });
+  const uri = resolveArgumentFileUri(document, { path: "config/jvm-blaa" });
+  assert.equal(uri.fsPath, targetPath);
+
+  vscode.workspace = {
+    fs: {
+      stat: async target => {
+        assert.equal(target.fsPath, targetPath);
+      }
+    }
+  };
+  const definition = await provideArgumentFileDefinition(document, { line: 0, character: 5 });
+  assert.equal(definition.uri.fsPath, targetPath);
+  assert.deepEqual(definition.range, new vscode.Position(0, 0));
 });
 
 test("resolves JDK homes and preserves explicit Java executable paths", () => {

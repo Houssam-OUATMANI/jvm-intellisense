@@ -8,6 +8,7 @@ All notable changes to this project are documented in this file.
 
 - `jvm-args` language support for `jvm.args`, `.jvmargs`, and `.vmoptions` files.
 - Theme-aware syntax highlighting for JVM options, values, comments, strings, and `@file` references.
+- Navigation to referenced argument files and automatic IntelliSense for referenced extensionless files.
 - Initial option completion, contextual value suggestions, and hover documentation.
 - Diagnostics for malformed arguments, invalid values, duplicate options, and known garbage collector conflicts.
 - JDK auto-detection and selection, dynamic `-XX` flags from `-XX:+PrintFlagsFinal`, and an explicit Java validation command.

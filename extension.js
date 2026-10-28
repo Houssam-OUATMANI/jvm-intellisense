@@ -579,6 +579,80 @@ function tokenizeLine(line, lineNumber, diagnostics) {
   return tokens;
 }
 
+function getArgumentFileReferences(document) {
+  const references = [];
+  for (let lineNumber = 0; lineNumber < document.lineCount; lineNumber++) {
+    const tokens = tokenizeLine(document.lineAt(lineNumber).text, lineNumber, []);
+    for (const token of tokens) {
+      if (token.value.startsWith("@") && token.value.length > 1) {
+        references.push({
+          path: token.value.slice(1),
+          range: token.range
+        });
+      }
+    }
+  }
+  return references;
+}
+
+function getArgumentFileReferenceAtPosition(document, position) {
+  const references = getArgumentFileReferences({
+    lineCount: 1,
+    lineAt: () => document.lineAt(position.line)
+  });
+  const reference = references.find(item =>
+    position.character >= item.range.start.character &&
+    position.character <= item.range.end.character
+  );
+  return reference && {
+    ...reference,
+    range: new vscode.Range(
+      position.line,
+      reference.range.start.character,
+      position.line,
+      reference.range.end.character
+    )
+  };
+}
+
+function resolveArgumentFileUri(document, reference) {
+  if (document.uri.scheme !== "file" || !reference || !reference.path) {
+    return undefined;
+  }
+  return vscode.Uri.file(path.resolve(path.dirname(document.uri.fsPath), reference.path));
+}
+
+async function enableArgumentFileLanguage(document) {
+  if (document.languageId === "plaintext") {
+    return vscode.languages.setTextDocumentLanguage(document, "jvm-args");
+  }
+  return document;
+}
+
+function isFileNotFound(error) {
+  return error && (error.code === "FileNotFound" || error.code === "ENOENT");
+}
+
+async function provideArgumentFileDefinition(document, position) {
+  const reference = getArgumentFileReferenceAtPosition(document, position);
+  if (!reference) {
+    return undefined;
+  }
+  const uri = resolveArgumentFileUri(document, reference);
+  if (!uri) {
+    return undefined;
+  }
+  try {
+    await vscode.workspace.fs.stat(uri);
+  } catch (error) {
+    if (isFileNotFound(error)) {
+      return undefined;
+    }
+    throw error;
+  }
+  return new vscode.Location(uri, new vscode.Position(0, 0));
+}
+
 function addDiagnostic(diagnostics, token, message, severity) {
   diagnostics.push(new vscode.Diagnostic(token.range, message, severity));
 }
@@ -863,9 +937,34 @@ async function validateWithJava(document) {
 
 function activate(context) {
   const diagnosticCollection = vscode.languages.createDiagnosticCollection("jvm-args");
+  const activatedArgumentFiles = new Set();
+  const pendingArgumentFiles = new Set();
+  const activateReferencedFiles = document => {
+    if (document.languageId !== "jvm-args" || document.uri.scheme !== "file") {
+      return;
+    }
+    for (const reference of getArgumentFileReferences(document)) {
+      const uri = resolveArgumentFileUri(document, reference);
+      if (!uri || activatedArgumentFiles.has(uri.toString()) || pendingArgumentFiles.has(uri.toString())) {
+        continue;
+      }
+      pendingArgumentFiles.add(uri.toString());
+      vscode.workspace.fs.stat(uri).then(() => vscode.workspace.openTextDocument(uri)).then(async referencedDocument => {
+        referencedDocument = await enableArgumentFileLanguage(referencedDocument);
+        activatedArgumentFiles.add(uri.toString());
+        updateDiagnostics(referencedDocument);
+        activateReferencedFiles(referencedDocument);
+      }).catch(error => {
+        if (!isFileNotFound(error)) {
+          vscode.window.showWarningMessage(`Could not load referenced JVM argument file "${reference.path}": ${error.message}`);
+        }
+      }).finally(() => pendingArgumentFiles.delete(uri.toString()));
+    }
+  };
   const updateDiagnostics = document => {
     if (document.languageId === "jvm-args") {
       diagnosticCollection.set(document.uri, validateDocument(document));
+      activateReferencedFiles(document);
     }
   };
   const updateAllDiagnostics = () => {
@@ -924,6 +1023,10 @@ function activate(context) {
       }
       await validateWithJava(editor.document);
     }),
+    vscode.languages.registerDefinitionProvider(
+      { language: "jvm-args" },
+      { provideDefinition: provideArgumentFileDefinition }
+    ),
     vscode.languages.registerCompletionItemProvider(
       { language: "jvm-args" },
       { provideCompletionItems: provideCompletions },
@@ -950,6 +1053,11 @@ module.exports = {
   deactivate,
   validateDocument,
   getJvmArguments,
+  getArgumentFileReferences,
+  getArgumentFileReferenceAtPosition,
+  resolveArgumentFileUri,
+  enableArgumentFileLanguage,
+  provideArgumentFileDefinition,
   loadJdk,
   parseJdkFlags,
   resolveJavaExecutable
