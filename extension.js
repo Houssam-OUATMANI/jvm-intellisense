@@ -1191,7 +1191,7 @@ async function validateWithJava(document) {
     return;
   }
   if (!selectedJdk) {
-    vscode.window.showWarningMessage("No JDK is available. Use JVM IntelliSense: Select JDK first.");
+    vscode.window.showWarningMessage("No JDK is available. Use JVM Sense: Select JDK first.");
     return;
   }
 

@@ -1,4 +1,4 @@
-# JVM IntelliSense
+# JVM Sense
 
 Language support for JVM launch options and Java argument files in Visual Studio Code.
 
@@ -6,7 +6,7 @@ Language support for JVM launch options and Java argument files in Visual Studio
 
 - Visual Studio Code 1.80 or later.
 - Node.js 18 or later to run the test suite.
-- A JDK is optional for editing and static diagnostics; JDK-aware completions and real JVM validation require a selected Java executable.
+- A JDK is optional for editing and static diagnostics; JDK-aware completions and real JVM validation require a detected or selected Java executable.
 
 ## Current features
 
@@ -15,7 +15,7 @@ Language support for JVM launch options and Java argument files in Visual Studio
 - Uses standard TextMate scopes so colors come from the active VS Code theme.
 - Opens `@file` references with one native document link spanning the entire reference (Ctrl+Click), resolves paths relative to the containing argument file, and enables IntelliSense for referenced files.
 - Configures `#` line comments and quote pairing.
-- Provides initial completion and hover documentation for common JVM and Java launcher options.
+- Provides curated completion and hover documentation for common JVM and Java launcher options.
 - Suggests example values for common heap, stack, and selected `-XX` options.
 - Reports malformed arguments and invalid values, plus repeated options and conflicting garbage collectors.
 - Provides English diagnostics for known deprecated or removed JVM flags and warns that nested `@file` references are for editor navigation only.
@@ -40,7 +40,16 @@ By default, `.args`, `.jvmargs`, and `.vmoptions` files are treated as JVM argum
 
 Entries must include the leading dot. The setting replaces the default list, so add any defaults you still want to keep. For example, set it to `[".jvmopts"]` to stop automatically claiming `.args` files. Changes are applied immediately to open files. Other language associations are left untouched.
 
-The extension does not statically claim `jvm.args`; it is treated as a JVM argument file only while `.args` is in the configured list (or when explicitly assigned with `files.associations`).
+The extension does not statically claim `jvm.args`; it is treated as a JVM argument file only while `.args` is in the configured list (or when explicitly assigned with `files.associations`). For example, the following setting disables automatic handling of `.args` files:
+
+```json
+{
+  "jvmIntelliSense.fileExtensions": [
+    ".jvmargs",
+    ".vmoptions"
+  ]
+}
+```
 
 Alternatively, explicitly associate a filename or glob through VS Code's built-in `files.associations` setting:
 
@@ -59,13 +68,13 @@ Java argument files do not expand nested `@file` references. The extension suppo
 
 If another extension already claims an extension, its language association takes precedence. You can explicitly use `files.associations` to assign a chosen pattern to `jvm-args`.
 
-The option catalog is an expanded, curated baseline rather than a complete list. Option availability and defaults vary by JDK version and vendor; when a JDK is selected, `-XX` flags are read from that JVM and options it does not report remain informational.
+The option catalog is a curated baseline rather than a complete list. Option availability and defaults vary by JDK version and vendor; when a JDK is selected, `-XX` flags are read from that JVM and options it does not report remain informational.
 
 ## JDK integration
 
-The extension detects Java from `JAVA_HOME` and then `PATH`. To choose another installation, run **JVM IntelliSense: Select JDK** or set `jvmIntelliSense.javaPath` to a Java executable or JDK home directory.
+The extension detects Java on first use from `JAVA_HOME` and then `PATH`. To choose another installation, run **JVM Sense: Select JDK** or set `jvmIntelliSense.javaPath` to a Java executable or JDK home directory.
 
-Run **JVM IntelliSense: Validate Options with Java** from a JVM argument file to check its JVM options with the selected executable. The command asks for confirmation because Java agent options may execute code. It does not expand `@file` references or launch an application.
+Run **JVM Sense: Validate Options with Java** from a JVM argument file to check its JVM options with the selected executable. The command asks for confirmation because Java agent options may execute code. It does not expand `@file` references or launch an application.
 
 ## Development
 

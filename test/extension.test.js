@@ -385,7 +385,7 @@ test("package metadata exposes customizable extensions and Marketplace icon", ()
   const manifest = require("../package.json");
   const settings = manifest.contributes.configuration.properties;
 
-  assert.equal(manifest.version, "0.1.0");
+  assert.equal(manifest.version, "1.0.0");
   assert.equal(manifest.license, "MIT");
   assert.equal(manifest.icon, "icon.png");
   const iconPath = path.join(__dirname, "..", manifest.icon);

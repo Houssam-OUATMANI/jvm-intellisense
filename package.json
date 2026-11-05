@@ -1,8 +1,8 @@
 {
   "name": "jvm-sense",
   "displayName": "JVM Sense",
-  "description": "Language support for JVM launch options and Java argument files.",
-  "version": "0.1.0",
+  "description": "Language support for JVM launch options and Java argument files in Visual Studio Code.",
+  "version": "1.0.0",
   "license": "MIT",
   "publisher": "houssam-ouatmani",
   "author": "Houssam OUATMANI",
@@ -64,15 +64,15 @@
     "commands": [
       {
         "command": "jvmIntelliSense.selectJdk",
-        "title": "JVM IntelliSense: Select JDK"
+        "title": "JVM Sense: Select JDK"
       },
       {
         "command": "jvmIntelliSense.validateOptions",
-        "title": "JVM IntelliSense: Validate Options with Java"
+        "title": "JVM Sense: Validate Options with Java"
       }
     ],
     "configuration": {
-      "title": "JVM IntelliSense",
+      "title": "JVM Sense",
       "properties": {
         "jvmIntelliSense.javaPath": {
           "type": "string",
