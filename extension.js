@@ -276,6 +276,113 @@ const options = [
     type: "Boolean"
   },
   {
+    label: "-XX:+PrintCommandLineFlags",
+    insertText: "-XX:+PrintCommandLineFlags",
+    description: "Print ergonomic command-line flags selected by the JVM.",
+    type: "Boolean"
+  },
+  {
+    label: "-XX:+UseContainerSupport",
+    insertText: "-XX:+UseContainerSupport",
+    description: "Use container limits when determining available memory and processors. Availability depends on the JDK version.",
+    type: "Boolean"
+  },
+  {
+    label: "-XX:+UseLargePages",
+    insertText: "-XX:+UseLargePages",
+    description: "Use large memory pages when supported and configured by the operating system.",
+    type: "Boolean"
+  },
+  {
+    label: "-XX:InitialHeapSize=",
+    insertText: "-XX:InitialHeapSize=",
+    description: "Set the initial Java heap size.",
+    type: "Memory size",
+    values: ["256m", "512m", "1g", "2g"]
+  },
+  {
+    label: "-XX:MinHeapSize=",
+    insertText: "-XX:MinHeapSize=",
+    description: "Set the minimum Java heap size.",
+    type: "Memory size",
+    values: ["128m", "256m", "512m", "1g"]
+  },
+  {
+    label: "-XX:MaxHeapSize=",
+    insertText: "-XX:MaxHeapSize=",
+    description: "Set the maximum Java heap size.",
+    type: "Memory size",
+    values: ["512m", "1g", "2g", "4g", "8g"]
+  },
+  {
+    label: "-XX:MaxDirectMemorySize=",
+    insertText: "-XX:MaxDirectMemorySize=",
+    description: "Set the maximum total size of direct-buffer memory.",
+    type: "Memory size",
+    values: ["128m", "256m", "512m", "1g"]
+  },
+  {
+    label: "-XX:MetaspaceSize=",
+    insertText: "-XX:MetaspaceSize=",
+    description: "Set the initial high-water mark for class metadata garbage collection.",
+    type: "Memory size",
+    values: ["64m", "128m", "256m"]
+  },
+  {
+    label: "-XX:MaxGCPauseMillis=",
+    insertText: "-XX:MaxGCPauseMillis=",
+    description: "Set the target maximum pause time for garbage collection; it is a goal, not a guarantee.",
+    type: "Integer",
+    values: ["100", "200", "500", "1000"]
+  },
+  {
+    label: "-XX:ParallelGCThreads=",
+    insertText: "-XX:ParallelGCThreads=",
+    description: "Set the number of threads used by parallel garbage-collection phases.",
+    type: "Integer",
+    values: ["1", "2", "4", "8"]
+  },
+  {
+    label: "-XX:ConcGCThreads=",
+    insertText: "-XX:ConcGCThreads=",
+    description: "Set the number of threads used by concurrent garbage-collection phases.",
+    type: "Integer",
+    values: ["1", "2", "4", "8"]
+  },
+  {
+    label: "-XX:G1HeapRegionSize=",
+    insertText: "-XX:G1HeapRegionSize=",
+    description: "Set the size of a G1 heap region. The JVM may adjust this value.",
+    type: "Memory size",
+    values: ["1m", "2m", "4m", "8m", "16m", "32m"]
+  },
+  {
+    label: "-XX:ReservedCodeCacheSize=",
+    insertText: "-XX:ReservedCodeCacheSize=",
+    description: "Set the maximum size of the reserved code cache.",
+    type: "Memory size",
+    values: ["128m", "240m", "512m"]
+  },
+  {
+    label: "-XX:HeapDumpPath=",
+    insertText: "-XX:HeapDumpPath=",
+    description: "Set the path used for heap dumps.",
+    type: "Path"
+  },
+  {
+    label: "-XX:ErrorFile=",
+    insertText: "-XX:ErrorFile=",
+    description: "Set the path for fatal error log files. The JVM may append a process identifier.",
+    type: "Path"
+  },
+  {
+    label: "-XX:NativeMemoryTracking=",
+    insertText: "-XX:NativeMemoryTracking=",
+    description: "Configure Native Memory Tracking.",
+    type: "Enum",
+    values: ["off", "summary", "detail"]
+  },
+  {
     label: "-XX:ActiveProcessorCount=",
     insertText: "-XX:ActiveProcessorCount=",
     description: "Override the number of processors the JVM uses when sizing pools.",
@@ -323,6 +430,13 @@ const options = [
     description: "Set the maximum Java heap size.",
     type: "Memory size",
     values: ["512m", "1g", "2g", "4g", "8g"]
+  },
+  {
+    label: "-Xmn",
+    insertText: "-Xmn",
+    description: "Set the initial and maximum size of the young generation. Availability depends on the garbage collector and JDK.",
+    type: "Memory size",
+    values: ["128m", "256m", "512m", "1g"]
   },
   {
     label: "-Xss",
@@ -387,6 +501,72 @@ const options = [
     type: "module/package=target-module"
   },
   {
+    label: "--add-exports",
+    insertText: "--add-exports",
+    description: "Export a package from one module to another module.",
+    type: "module/package=target-module"
+  },
+  {
+    label: "--add-reads",
+    insertText: "--add-reads",
+    description: "Add a read edge from one module to another module.",
+    type: "module=target-module"
+  },
+  {
+    label: "--enable-native-access",
+    insertText: "--enable-native-access",
+    description: "Enable native access for the specified module or modules.",
+    type: "Module name(s)"
+  },
+  {
+    label: "--limit-modules",
+    insertText: "--limit-modules",
+    description: "Limit the observable universe of modules.",
+    type: "Module name(s)"
+  },
+  {
+    label: "--patch-module",
+    insertText: "--patch-module",
+    description: "Augment or override classes and resources in a module.",
+    type: "module=path"
+  },
+  {
+    label: "--describe-module",
+    insertText: "--describe-module",
+    description: "Describe a module and then exit.",
+    type: "Module name"
+  },
+  {
+    label: "--list-modules",
+    insertText: "--list-modules",
+    description: "List observable modules and then exit.",
+    type: "Boolean"
+  },
+  {
+    label: "--dry-run",
+    insertText: "--dry-run",
+    description: "Create the VM but do not execute the main method.",
+    type: "Boolean"
+  },
+  {
+    label: "--validate-modules",
+    insertText: "--validate-modules",
+    description: "Validate module configuration and then exit.",
+    type: "Boolean"
+  },
+  {
+    label: "-classpath",
+    insertText: "-classpath",
+    description: "Set the user class path (equivalent to -cp).",
+    type: "Path"
+  },
+  {
+    label: "-p",
+    insertText: "-p",
+    description: "Set the module path (equivalent to --module-path).",
+    type: "Path"
+  },
+  {
     label: "-jar",
     insertText: "-jar",
     description: "Launch an application from a JAR file.",
@@ -410,6 +590,27 @@ const valueOptions = new Map(
     .filter(option => option.values)
     .map(option => [option.label.replace(/=$/, ""), option])
 );
+const optionsWithValues = new Set([
+  "--add-modules",
+  "--add-exports",
+  "--add-opens",
+  "--add-reads",
+  "--enable-native-access",
+  "--limit-modules",
+  "--patch-module",
+  "--upgrade-module-path",
+  "--module-path",
+  "--class-path",
+  "--describe-module",
+  "-classpath",
+  "-cp",
+  "-p"
+]);
+const launcherExitOptions = new Set([
+  "--describe-module",
+  "--list-modules",
+  "--validate-modules"
+]);
 
 function getToken(document, position) {
   const line = document.lineAt(position.line).text;
@@ -460,7 +661,7 @@ function getValueCompletions(token, range) {
     prefix = xxMatch[1];
     typedValue = xxMatch[3];
   } else {
-    const xMatch = token.match(/^(-Xm[sx]|-Xss)(.*)$/);
+    const xMatch = token.match(/^(-Xm[nsx]|-Xss)(.*)$/);
     if (xMatch) {
       option = valueOptions.get(xMatch[1]);
       prefix = xMatch[1];
@@ -519,8 +720,8 @@ function findOption(token) {
       description: "Set a system property. The property name and value are application-specific."
     };
   }
-  if (/^-Xm[sx]|^-Xss/.test(token)) {
-    return valueOptions.get(token.match(/^-Xm[sx]|^-Xss/)[0]);
+  if (/^-Xm[nsx]|^-Xss/.test(token)) {
+    return valueOptions.get(token.match(/^-Xm[nsx]|^-Xss/)[0]);
   }
   return undefined;
 }
@@ -796,6 +997,8 @@ function validateXXOption(token, diagnostics, jdk = selectedJdk) {
     valid = value.trim() !== "" && Number.isFinite(Number(value));
   } else if (option.type === "String") {
     valid = value.length > 0;
+  } else if (option.type === "Enum") {
+    valid = option.values.includes(value);
   }
   if (!valid) {
     addDiagnostic(
@@ -834,7 +1037,7 @@ function validateToken(token, diagnostics, jdk = selectedJdk) {
     return;
   }
 
-  const memoryMatch = value.match(/^(-Xm[sx]|-Xss)(.*)$/);
+  const memoryMatch = value.match(/^(-Xm[nsx]|-Xss)(.*)$/);
   if (memoryMatch) {
     if (!memoryMatch[2] || !validateMemorySize(memoryMatch[2])) {
       addDiagnostic(
@@ -876,11 +1079,13 @@ function validateDocument(document, jdk = selectedJdk) {
   const diagnostics = [];
   const occurrences = new Map();
   const enabledCollectors = [];
+  const allTokens = [];
 
   for (let lineNumber = 0; lineNumber < document.lineCount; lineNumber++) {
     const lineDiagnostics = [];
     const tokens = tokenizeLine(document.lineAt(lineNumber).text, lineNumber, lineDiagnostics);
     diagnostics.push(...lineDiagnostics);
+    allTokens.push(...tokens);
 
     for (const token of tokens) {
       validateToken(token, diagnostics, jdk);
@@ -918,6 +1123,22 @@ function validateDocument(document, jdk = selectedJdk) {
     }
   }
 
+  for (let index = 0; index < allTokens.length; index++) {
+    const token = allTokens[index];
+    if (!optionsWithValues.has(token.value)) {
+      continue;
+    }
+    const nextToken = allTokens[index + 1];
+    if (!nextToken || nextToken.value.startsWith("-")) {
+      addDiagnostic(
+        diagnostics,
+        token,
+        `${token.value} requires a value.`,
+        vscode.DiagnosticSeverity.Error
+      );
+    }
+  }
+
   const seenCollectors = new Set();
   for (const { token, name } of enabledCollectors) {
     if (seenCollectors.size > 0 && !seenCollectors.has(name)) {
@@ -940,24 +1161,10 @@ function getJvmArguments(document) {
   }
 
   const argumentsToValidate = [];
-  const optionsWithValues = new Set([
-    "--add-modules",
-    "--add-exports",
-    "--add-opens",
-    "--add-reads",
-    "--enable-native-access",
-    "--limit-modules",
-    "--patch-module",
-    "--upgrade-module-path",
-    "--module-path",
-    "--class-path",
-    "-classpath",
-    "-cp",
-    "-p"
-  ]);
   for (let index = 0; index < tokens.length; index++) {
     const value = tokens[index].value;
-    if (value.startsWith("@") || ["-jar", "-m", "--module", "--source"].includes(value)) {
+    if (value.startsWith("@") || ["-jar", "-m", "--module", "--source"].includes(value) ||
+      launcherExitOptions.has(value)) {
       break;
     }
     if (!value.startsWith("-")) {
@@ -1016,6 +1223,9 @@ function activate(context) {
   const activatedArgumentFiles = new Set();
   const pendingArgumentFiles = new Set();
   const automaticallyManagedDocuments = new Set();
+  let lastReferencedUris = new Set();
+  const haveSameItems = (left, right) =>
+    left.size === right.size && [...left].every(item => right.has(item));
   const activateReferencedFiles = document => {
     if (document.languageId !== "jvm-args" || document.uri.scheme !== "file") {
       return;
@@ -1035,6 +1245,7 @@ function activate(context) {
         activatedArgumentFiles.add(uri.toString());
         updateDiagnostics(referencedDocument);
         activateReferencedFiles(referencedDocument);
+        updateReferencedDocumentLanguagesIfChanged();
       }).catch(error => {
         if (!isFileNotFound(error)) {
           vscode.window.showWarningMessage(`Could not load referenced JVM argument file "${reference.path}": ${error.message}`);
@@ -1060,6 +1271,7 @@ function activate(context) {
     if (document.languageId === "jvm-args") {
       diagnosticCollection.set(document.uri, validateDocument(document));
       activateReferencedFiles(document);
+      ensureJdkDetected();
     }
   };
   const getReferencedFileUris = extensions => {
@@ -1104,6 +1316,7 @@ function activate(context) {
   const updateOpenDocumentLanguages = async () => {
     const extensions = vscode.workspace.getConfiguration("jvmIntelliSense").get("fileExtensions", []);
     const referencedUris = getReferencedFileUris(extensions);
+    lastReferencedUris = new Set(referencedUris);
     for (const document of vscode.workspace.textDocuments) {
       const key = document.uri.toString();
       const extensionMatches = document.uri.scheme === "file" &&
@@ -1131,12 +1344,34 @@ function activate(context) {
       }
     }
   };
+  const updateReferencedDocumentLanguagesIfChanged = () => {
+    const extensions = vscode.workspace.getConfiguration("jvmIntelliSense").get("fileExtensions", []);
+    const referencedUris = getReferencedFileUris(extensions);
+    if (!haveSameItems(referencedUris, lastReferencedUris)) {
+      updateOpenDocumentLanguages().catch(error =>
+        vscode.window.showErrorMessage(`Could not update referenced JVM argument files: ${error.message}`)
+      );
+    }
+  };
   const updateAllDiagnostics = async () => {
     await updateOpenDocumentLanguages();
   };
   const refreshJdk = async () => {
     selectedJdk = await detectJdk();
-    updateAllDiagnostics();
+    await updateAllDiagnostics();
+  };
+  let jdkDetectionStarted = false;
+  const ensureJdkDetected = async () => {
+    if (jdkDetectionStarted) {
+      return;
+    }
+    jdkDetectionStarted = true;
+    try {
+      selectedJdk = await detectJdk();
+      await updateAllDiagnostics();
+    } catch (error) {
+      vscode.window.showWarningMessage(`JDK auto-detection failed: ${error.message}`);
+    }
   };
   context.subscriptions.push(
     diagnosticCollection,
@@ -1145,7 +1380,10 @@ function activate(context) {
         vscode.window.showErrorMessage(`Could not enable JVM argument support: ${error.message}`)
       );
     }),
-    vscode.workspace.onDidChangeTextDocument(event => updateDiagnostics(event.document)),
+    vscode.workspace.onDidChangeTextDocument(event => {
+      updateDiagnostics(event.document);
+      updateReferencedDocumentLanguagesIfChanged();
+    }),
     vscode.workspace.onDidCloseTextDocument(document => {
       const key = document.uri.toString();
       automaticallyManagedDocuments.delete(key);
@@ -1197,6 +1435,7 @@ function activate(context) {
         vscode.window.showWarningMessage("Open a JVM arguments file before validating its options.");
         return;
       }
+      await ensureJdkDetected();
       await validateWithJava(editor.document);
     }),
     vscode.languages.registerDocumentLinkProvider(
@@ -1217,9 +1456,6 @@ function activate(context) {
     )
   );
 
-  refreshJdk().catch(error => {
-    vscode.window.showWarningMessage(`JDK auto-detection failed: ${error.message}`);
-  });
 }
 
 function deactivate() {}

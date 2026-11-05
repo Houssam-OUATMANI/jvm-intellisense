@@ -51,9 +51,6 @@
           "JVM Arguments",
           "jvm-args"
         ],
-        "filenames": [
-          "jvm.args"
-        ],
         "configuration": "./language-configuration.json"
       }
     ],

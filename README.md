@@ -10,7 +10,7 @@ Language support for JVM launch options and Java argument files in Visual Studio
 
 ## Current features
 
-- Associates `jvm.args` and configurable argument-file extensions with the `jvm-args` language.
+- Associates configured argument-file extensions with the `jvm-args` language; the defaults include `jvm.args`.
 - Highlights JVM options, system properties, values, comments, quoted arguments, and `@file` references.
 - Uses standard TextMate scopes so colors come from the active VS Code theme.
 - Opens `@file` references with one native document link spanning the entire reference (Ctrl+Click), resolves paths relative to the containing argument file, and enables IntelliSense for referenced files.
@@ -21,6 +21,7 @@ Language support for JVM launch options and Java argument files in Visual Studio
 - Provides English diagnostics for known deprecated or removed JVM flags and warns that nested `@file` references are for editor navigation only.
 - Marks options absent from the bundled catalog as informational because their availability depends on the JDK.
 - Detects Java from `JAVA_HOME` or `PATH`, or lets you select a Java executable/JDK home.
+- Defers Java detection until JVM argument support or a JDK command is first used.
 - Loads `-XX` flags from the selected JVM with `-XX:+PrintFlagsFinal` and adapts flag completions and diagnostics.
 - Provides a command to validate JVM options with the selected Java executable.
 
@@ -39,6 +40,8 @@ By default, `.args`, `.jvmargs`, and `.vmoptions` files are treated as JVM argum
 
 Entries must include the leading dot. The setting replaces the default list, so add any defaults you still want to keep. For example, set it to `[".jvmopts"]` to stop automatically claiming `.args` files. Changes are applied immediately to open files. Other language associations are left untouched.
 
+The extension does not statically claim `jvm.args`; it is treated as a JVM argument file only while `.args` is in the configured list (or when explicitly assigned with `files.associations`).
+
 Alternatively, explicitly associate a filename or glob through VS Code's built-in `files.associations` setting:
 
 ```json
@@ -56,7 +59,7 @@ Java argument files do not expand nested `@file` references. The extension suppo
 
 If another extension already claims an extension, its language association takes precedence. You can explicitly use `files.associations` to assign a chosen pattern to `jvm-args`.
 
-The option catalog is an initial, curated baseline rather than a complete list. Option availability and defaults vary by JDK version and vendor; when a JDK is selected, `-XX` flags are read from that JVM and options it does not report remain informational.
+The option catalog is an expanded, curated baseline rather than a complete list. Option availability and defaults vary by JDK version and vendor; when a JDK is selected, `-XX` flags are read from that JVM and options it does not report remain informational.
 
 ## JDK integration
 

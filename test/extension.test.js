@@ -139,6 +139,42 @@ test("reports invalid values and unterminated quotes as errors", () => {
   assert.equal(diagnostics.filter(item => item.severity === vscode.DiagnosticSeverity.Error).length, 4);
 });
 
+test("reports missing values for launcher options that require an argument", () => {
+  const diagnostics = validateDocument(documentFrom([
+    "-cp",
+    "--add-opens",
+    "--module-path modules"
+  ].join("\n")));
+
+  assert.equal(diagnostics.length, 2);
+  assert(diagnostics.every(item => item.severity === vscode.DiagnosticSeverity.Error));
+  assert(diagnostics[0].message.includes("-cp requires a value"));
+  assert(diagnostics[1].message.includes("--add-opens requires a value"));
+});
+
+test("recognizes additional common JVM and launcher options", () => {
+  const diagnostics = validateDocument(documentFrom([
+    "-Xmn256m",
+    "-XX:MaxDirectMemorySize=256m",
+    "-XX:MaxGCPauseMillis=200",
+    "-XX:NativeMemoryTracking=summary",
+    "--add-exports java.base/sun.nio.ch=ALL-UNNAMED",
+    "--patch-module java.base=patches/java.base"
+  ].join("\n")));
+
+  assert.deepEqual(diagnostics, []);
+});
+
+test("validates enumerated JVM values and skips launcher exit modes in Java validation", () => {
+  const diagnostics = validateDocument(documentFrom("-XX:NativeMemoryTracking=unknown"));
+  assert.equal(diagnostics.length, 1);
+  assert.equal(diagnostics[0].severity, vscode.DiagnosticSeverity.Error);
+  assert.deepEqual(
+    getJvmArguments(documentFrom("--describe-module java.base\n-Xmx1g")),
+    []
+  );
+});
+
 test("reports repeated options and different explicitly enabled collectors", () => {
   const duplicate = validateDocument(documentFrom("-XX:+UseG1GC\n-XX:+UseG1GC"));
   assert(duplicate.some(item => item.severity === vscode.DiagnosticSeverity.Warning && item.message.includes("more than once")));
@@ -365,16 +401,34 @@ test("package metadata exposes customizable extensions and Marketplace icon", ()
     ".vmoptions"
   ]);
   assert(!manifest.contributes.languages[0].extensions);
+  assert(!manifest.contributes.languages[0].filenames);
+  assert(manifest.activationEvents.includes("onStartupFinished"));
 });
 
 test("reapplies extension changes immediately and restores removed files to Plain Text", async () => {
   let extensions = [".args"];
   let configurationListener;
   let openDocumentListener;
+  let changeDocumentListener;
+  let rootText = "@extensionless";
+  const referencedRoot = {
+    uri: vscode.Uri.file("C:\\workspace\\root.customargs"),
+    languageId: "jvm-args",
+    lineCount: 1,
+    lineAt: () => ({ text: rootText })
+  };
+  const referencedDocument = {
+    uri: vscode.Uri.file("C:\\workspace\\extensionless"),
+    languageId: "plaintext",
+    lineCount: 0,
+    lineAt: () => ({ text: "" })
+  };
   const documents = [
-    { uri: vscode.Uri.file("C:\\workspace\\one.args"), languageId: "plaintext", lineCount: 0, lineAt: () => ({ text: "" }) },
+    { uri: vscode.Uri.file("C:\\workspace\\jvm.args"), languageId: "plaintext", lineCount: 0, lineAt: () => ({ text: "" }) },
     { uri: vscode.Uri.file("C:\\workspace\\two.blabla"), languageId: "plaintext", lineCount: 0, lineAt: () => ({ text: "" }) },
-    { uri: vscode.Uri.file("C:\\workspace\\owned.args"), languageId: "java", lineCount: 1, lineAt: () => ({ text: "@one.args" }) }
+    { uri: vscode.Uri.file("C:\\workspace\\owned.args"), languageId: "java", lineCount: 1, lineAt: () => ({ text: "@one.args" }) },
+    referencedRoot,
+    referencedDocument
   ];
   const diagnostics = new Map();
   vscode.languages = {
@@ -399,7 +453,7 @@ test("reapplies extension changes immediately and restores removed files to Plai
       update: async () => {}
     }),
     onDidOpenTextDocument: listener => (openDocumentListener = listener, { dispose() {} }),
-    onDidChangeTextDocument: () => ({ dispose() {} }),
+    onDidChangeTextDocument: listener => (changeDocumentListener = listener, { dispose() {} }),
     onDidCloseTextDocument: () => ({ dispose() {} }),
     onDidChangeConfiguration: listener => (configurationListener = listener, { dispose() {} }),
     fs: { stat: async () => {} },
@@ -417,6 +471,12 @@ test("reapplies extension changes immediately and restores removed files to Plai
   assert.equal(documents[0].languageId, "jvm-args");
   assert.equal(documents[1].languageId, "plaintext");
   assert.equal(documents[2].languageId, "java");
+  assert.equal(referencedDocument.languageId, "jvm-args");
+
+  rootText = "# reference removed";
+  changeDocumentListener({ document: referencedRoot });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(referencedDocument.languageId, "plaintext");
 
   extensions = [".blabla"];
   configurationListener({ affectsConfiguration: name => name === "jvmIntelliSense.fileExtensions" });

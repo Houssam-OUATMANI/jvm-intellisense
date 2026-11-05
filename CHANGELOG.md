@@ -7,6 +7,7 @@ All notable changes to this project are documented in this file.
 ### Added
 
 - Configurable JVM argument file extensions with `.args`, `.jvmargs`, and `.vmoptions` as defaults.
+- More common heap, garbage-collection, module, and launcher options in completion and diagnostics.
 - Marketplace icon and searchable JVM/Java extension keywords.
 - Configuration examples explaining how to avoid conflicts with generic extensions.
 - English warnings and errors for known deprecated/removed flags, including CMS removal in Java 14.
@@ -14,8 +15,11 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
-- Argument file extensions are no longer globally claimed by the language contribution; only configured Plain Text files are automatically switched to `jvm-args`.
+- JVM argument extensions are no longer globally claimed by the language contribution; only configured Plain Text files are automatically switched to `jvm-args`.
 - Open documents are immediately switched into or out of JVM argument support when the extension list changes.
+- JDK detection is deferred until JVM argument support or a JDK command is first used.
+- Required values for common module-path, class-path, and module-access options are diagnosed when missing.
+- Automatically enabled referenced files are returned to Plain Text after their last reference is removed.
 
 ## [0.1.0] - 2026-10-28
 
